@@ -70,7 +70,8 @@ class TextMelLoader(torch.utils.data.Dataset):
         return (text, mel, speaker_id, f0)
 
     def get_speaker_id(self, speaker_id):
-        return torch.IntTensor([self.speaker_ids[int(speaker_id)]])
+        return 0
+        #return torch.IntTensor([self.speaker_ids[int(speaker_id)]])
 
     def get_mel_and_f0(self, filepath):
         audio, sampling_rate = load_wav_to_torch(filepath)
@@ -143,7 +144,7 @@ class TextMelCollate():
         speaker_ids = torch.LongTensor(len(batch))
         f0_padded = torch.FloatTensor(len(batch), 1, max_target_len)
         f0_padded.zero_()
-
+        
         for i in range(len(ids_sorted_decreasing)):
             mel = batch[ids_sorted_decreasing[i]][1]
             mel_padded[i, :, :mel.size(1)] = mel

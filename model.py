@@ -437,6 +437,7 @@ class Decoder(nn.Module):
         f0s = torch.cat((f0s, f0_dummy), dim=2)
         f0s = F.relu(self.prenet_f0(f0s))
         f0s = f0s.permute(2, 0, 1)
+        f0s = f0s.new_zeros(f0s.size())
 
         self.initialize_decoder_states(
             memory, mask=~get_mask_from_lengths(memory_lengths))
@@ -479,6 +480,7 @@ class Decoder(nn.Module):
         f0s = torch.cat((f0s, f0_dummy), dim=2)
         f0s = F.relu(self.prenet_f0(f0s))
         f0s = f0s.permute(2, 0, 1)
+        f0s = f0s.new_zeros(f0s.size())
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while True:
@@ -526,6 +528,7 @@ class Decoder(nn.Module):
         f0s = torch.cat((f0s, f0_dummy), dim=2)
         f0s = F.relu(self.prenet_f0(f0s))
         f0s = f0s.permute(2, 0, 1)
+        f0s = f0s.new_zeros(f0s.size())
 
         mel_outputs, gate_outputs, alignments = [], [], []
         for i in range(len(attention_map)):
@@ -563,8 +566,9 @@ class Tacotron2(nn.Module):
         self.postnet = Postnet(hparams)
         if hparams.with_gst:
             self.gst = GST(hparams)
-        self.speaker_embedding = nn.Embedding(
-            hparams.n_speakers, hparams.speaker_embedding_dim)
+#        self.speaker_embedding = nn.Embedding(
+#            hparams.n_speakers, hparams.speaker_embedding_dim)
+        self.speaker_embedding_dim = hparams.speaker_embedding_dim
 
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, \
@@ -600,7 +604,8 @@ class Tacotron2(nn.Module):
 
         embedded_inputs = self.embedding(inputs).transpose(1, 2)
         embedded_text = self.encoder(embedded_inputs, input_lengths)
-        embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
+        #embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
+        embedded_speakers = embedded_text.new_zeros(embedded_text.size(0), 1, self.speaker_embedding_dim)
         embedded_gst = self.gst(targets)
         embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
         embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
