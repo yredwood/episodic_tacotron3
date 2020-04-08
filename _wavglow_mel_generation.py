@@ -27,7 +27,7 @@ def prepare_dataloaders(hparams):
     return train_loader, valset, collate_fn, train_sampler
 
 
-def run(output_dir, ckpt_path):
+def run(ckpt_path):
 
     model = load_model(hparams)
     checkpoint_dict = torch.load(ckpt_path, map_location='cpu')
@@ -39,8 +39,9 @@ def run(output_dir, ckpt_path):
     for batch in tqdm(train_loader):
 
         text, _, mel, _, _, _, fname = batch
-        mel_pred, attn = model.inference((text.cuda(), mel.cuda()))
+        _, mel_pred, _, attn = model.inference((text.cuda(), mel.cuda()))
         
+        pdb.set_trace()
         output_fname = fname[0].replace('.wav', '-kkr2.mel')
         mel = mel_pred[0].data.cpu().numpy()
         np.save(output_fname, mel)
@@ -48,9 +49,8 @@ def run(output_dir, ckpt_path):
 
 if __name__ == '__main__':
 
-    output_dir = 'data-bin/mel_train-clean-100'
-    ckpt_path = 'models/gst_tacotron_baseline_pretrained/checkpoint_45000'
+    ckpt_path = 'models/original_mellotron_nof0nosp_transpose_from_pretrained/checkpoint_17000'
     
     hparams = create_hparams()
     hparams.batch_size = 1
-    run(output_dir, ckpt_path)
+    run(ckpt_path)

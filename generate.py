@@ -10,6 +10,7 @@ from scipy.io.wavfile import read
 import torch
 import matplotlib
 import matplotlib.pyplot as plt
+matplotlib.use('Agg')
 
 from audio_processing import griffin_lim
 from hparams import create_hparams
@@ -23,7 +24,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/original_mellotron_nof0nosp_transpose_from_pretrained/checkpoint_12000'
+checkpoint_path = 'models/episodic_baseline/checkpoint_1000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = '/home/mike/models/waveglow/waveglow_80000'
 audio_path = 'filelists/libri100_val.txt'

@@ -7,12 +7,19 @@ from torch import nn
 from torch.nn import functional as F
 from layers import ConvNorm, LinearNorm
 from utils import to_gpu, get_mask_from_lengths
-from modules import GST
+from modules import GST, TransformerStyleTokenLayer
 
 drop_rate = 0.5
 
 def load_model(hparams):
-    model = Tacotron2(hparams).cuda()
+
+    if hparams.model_name == 'episodic-baseline':
+        model = EpisodicTacotron_GSTbaseline(hparams).cuda()
+    elif hparams.model_name == 'gst-tacotron':
+        model = Tacotron2(hparams).cuda()
+    else:
+        raise NameError('no model named {}'.format(hparams.model_name))
+    print ('model [{}] is loaded'.format(hparams.model_name))
     if hparams.fp16_run:
         model.decoder.attention_layer.score_mask_value = finfo('float16').min
 
@@ -691,3 +698,143 @@ class Tacotron2(nn.Module):
 
         return self.parse_output(
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
+
+
+class EpisodicTacotron_GSTbaseline(Tacotron2):
+#    def __init__(self, hparams):
+#        super(EpisodicTacotron_GSTbaseline, self).__init__()
+#        self.mask_padding = hparams.mask_padding
+#
+#        self.fp16_run = hparams.fp16_run
+#        self.n_mel_channels =hparams.n_mel_channels
+#        self.n_frames_per_step = hparams.n_frames_per_step
+#
+#        self.encoder = Encoder(hparams)
+#        self.gst = GST(hparams)
+#        self.decoder = Decoder(hparams)
+#        self.postnet = Postnet(hparams)
+
+        #self.p_style_teacher_forcing = hparams.p_style_teacher_forcing
+
+    def parse_batch(self, batch):
+        '''
+        returns (x,y)
+        '''
+        text_padded     = to_gpu(batch['query']['text_padded']).long()
+        text_length     = to_gpu(batch['query']['input_lengths']).long()
+        mel_padded      = to_gpu(batch['query']['mel_padded']).float()
+        mel_length      = to_gpu(batch['query']['output_lengths']).long()
+        gate_padded     = to_gpu(batch['query']['gate_padded']).float()
+
+        return ((text_padded, text_length, mel_padded, None, mel_length, None, None), 
+                (mel_padded, gate_padded))
+
+
+class EpisodicTacotronTransformer(Tacotron2):
+    def __init__(self, hparams):
+        super(Tacotron2, self).__init__()
+        self.mask_padding = hparams.mask_padding
+        self.fp16_run = hparams.fp16_run
+        self.n_mel_channels = hparams.n_mel_channels
+        self.n_frames_per_step = hparams.n_frames_per_step
+        self.embedding = nn.Embedding(
+            hparams.n_symbols, hparams.symbols_embedding_dim)
+        std = sqrt(2.0 / (hparams.n_symbols + hparams.symbols_embedding_dim))
+        val = sqrt(3.0) * std  # uniform bounds for std
+        self.embedding.weight.data.uniform_(-val, val)
+        self.encoder = Encoder(hparams)
+        self.decoder = Decoder(hparams)
+        self.postnet = Postnet(hparams)
+        self.gst = TransformerStyleTokenLayer(hparams)
+#        self.speaker_embedding = nn.Embedding(
+#            hparams.n_speakers, hparams.speaker_embedding_dim)
+        self.speaker_embedding_dim = hparams.speaker_embedding_dim
+
+    def parse_batch(self, batch):
+
+        q_text_padded     = to_gpu(batch['query']['text_padded']).long()
+        q_text_length     = to_gpu(batch['query']['input_lengths']).long()
+        q_mel_padded      = to_gpu(batch['query']['mel_padded']).float()
+        q_mel_length      = to_gpu(batch['query']['output_lengths']).long()
+        q_gate_padded     = to_gpu(batch['query']['gate_padded']).float()
+
+        s_text_padded     = to_gpu(batch['support']['text_padded']).long()
+        s_text_length     = to_gpu(batch['support']['input_lengths']).long()
+        s_mel_padded      = to_gpu(batch['support']['mel_padded']).float()
+        s_mel_length      = to_gpu(batch['support']['output_lengths']).long()
+        s_gate_padded     = to_gpu(batch['support']['gate_padded']).float()
+
+        y = (q_mel_padded, q_gate_padded)
+        x = {
+            'query': (q_text_padded, q_text_length, q_mel_padded, q_mel_length),
+            'support': (s_text_padded, s_text_length, s_mel_padded, s_mel_length),
+        }
+        return (x, y)
+
+    def forward(self, inputs):
+        query_set = inputs['query']
+        support_set = inputs['support']
+
+        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set[1])
+        # bsz, t, token_dim
+
+        support_text_embedding = self.embedding(support_set[0]).transpose(1,2)
+        support_text_embedding = self.encoder(support_text_embedding, query_set[1])
+        # bsz_s, t_s, token_dim
+
+        speaker_embedding = embedded_text.new_zeros(query_text_embedding.size(0), embedded_text.size(1),
+                self.speaker_embedding_dim)
+
+        style_embedding = self.gst(query_text_embedding, query_set[1],
+                support_text_embedding, support_set[1],
+                query_set[2])
+
+
+
+
+#    def forward(self, inputs):
+#        # support set 
+#        inputs, input_lengths, targets, max_len, \
+#            output_lengths, speaker_ids, f0s = inputs
+#        input_lengths, output_lengths = input_lengths.data, output_lengths.data
+#        
+#
+#        embedded_inputs = self.embedding(inputs).transpose(1, 2)
+#        embedded_text = self.encoder(embedded_inputs, input_lengths)
+#        #embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
+#        embedded_speakers = embedded_text.new_zeros(embedded_text.size(0), 1, self.speaker_embedding_dim)
+#        embedded_gst = self.gst(targets)
+#        embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
+#        embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
+#
+#        encoder_outputs = torch.cat(
+#            (embedded_text, embedded_gst, embedded_speakers), dim=2)
+#
+#        mel_outputs, gate_outputs, alignments = self.decoder(
+#            encoder_outputs, targets, memory_lengths=input_lengths, f0s=f0s)
+#
+#        mel_outputs_postnet = self.postnet(mel_outputs)
+#        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+#
+#        return self.parse_output(
+#            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
+#            output_lengths)
+#
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #

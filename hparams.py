@@ -16,11 +16,11 @@ def create_hparams(hparams_string=None, verbose=False):
         fp16_run=False,
         distributed_run=False,
         dist_backend="nccl",
-        dist_url="tcp://localhost:54324",
+        dist_url="tcp://localhost:54325",
         cudnn_enabled=True,
         cudnn_benchmark=False,
         ignore_layers=['speaker_embedding.weight'],
-
+#
         ################################
         # Data Parameters             #
         ################################
@@ -114,8 +114,18 @@ def create_hparams(hparams_string=None, verbose=False):
         mask_padding=True,  # set model's padded outputs to padded values
 
 
-        # episodic training hparams
-        episodic_training = False,
+        #####################################
+        #####  episodic training hparams ####
+        #####################################
+        #episodic_training = False,
+        #model_name = 'gst-tacotron',
+
+        episodic_training = True, 
+        model_name = 'episodic-baseline',
+
+        num_common = 1,
+        num_support = 1,
+        num_query = 32,
 
     )
 

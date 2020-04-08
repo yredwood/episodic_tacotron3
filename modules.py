@@ -153,3 +153,52 @@ class GST(nn.Module):
         style_embed = self.stl(enc_out)
 
         return style_embed
+
+
+class TransformerStyleTokenLayer(nn.Module):
+    def __init__(self, hp):
+        super().__init__()
+        self.encoder = ReferenceEncoder(hp)
+        self.stl = STL(hp)
+
+        self.senctence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
+                hidden_size=hp.encoder_embedding_dim, batch_first=True)
+
+
+        self.mab = MAB_qkv(hp.encoder_embedding_dim,
+                hp.encoder_embedding_dim,
+                hp.ref_enc_gru_size, 
+                hp.token_embedding_size, num_heads=hp.num_heads)
+
+
+    def forward(self, text, text_len, rtext, rtext_len, rmel):
+        enc_out = self.encoder(rmel)
+        style_embed = self.stl(enc_out) # bsz_s, 1, token_embedding_size
+
+        text_len = text_len.cpu().numpy()
+        _tp = nn.utils.rnn.pack_padded_sequence(text, text_len, batch_first=True)
+        self.sentence_encoder.flatten_parameters()
+        _, query = self.sentence_encoder(_tp) # 1, bsz, encoder_embedding_dim
+
+        rtext_len = rtext_len.cpu().numpy()
+        _rtp = nn.utils.rnn.pack_padded_sequence(rtext, rtext_len, batch_first=True)
+        _, key = self.sentence_encoder(_rtp) # 1, bsz_s, encoder_embedding_dim
+
+        style, attn = self.mab(query.transpose(0,1), key.repeat(query.size(0),1,1),
+                style_embed, get_attn=True)
+        
+        # bsz, 1, token_embedding_size
+        return style
+
+
+
+
+
+
+
+
+
+
+
+
+        #
