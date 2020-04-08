@@ -228,6 +228,7 @@ class Decoder(nn.Module):
         self.p_attention_dropout = hparams.p_attention_dropout
         self.p_decoder_dropout = hparams.p_decoder_dropout
         self.p_teacher_forcing = hparams.p_teacher_forcing
+        self.prenet_f0_dim = hparams.prenet_f0_dim
 
         self.prenet_f0 = ConvNorm(
             1, hparams.prenet_f0_dim,
@@ -476,18 +477,19 @@ class Decoder(nn.Module):
         decoder_input = self.get_go_frame(memory)
 
         self.initialize_decoder_states(memory, mask=None)
-        f0_dummy = self.get_end_f0(f0s)
-        f0s = torch.cat((f0s, f0_dummy), dim=2)
-        f0s = F.relu(self.prenet_f0(f0s))
-        f0s = f0s.permute(2, 0, 1)
-        f0s = f0s.new_zeros(f0s.size())
+#        f0_dummy = self.get_end_f0(f0s)
+#        f0s = torch.cat((f0s, f0_dummy), dim=2)
+#        f0s = F.relu(self.prenet_f0(f0s))
+#        f0s = f0s.permute(2, 0, 1)
+#        f0s = f0s.new_zeros(f0s.size())
+        f0 = memory.new_zeros(memory.size(0), self.prenet_f0_dim)
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while True:
-            if len(mel_outputs) < len(f0s):
-                f0 = f0s[len(mel_outputs)]
-            else:
-                f0 = f0s[-1] * 0
+#            if len(mel_outputs) < len(f0s):
+#                f0 = f0s[len(mel_outputs)]
+#            else:
+#                f0 = f0s[-1] * 0
 
             decoder_input = torch.cat((self.prenet(decoder_input), f0), dim=1)
             mel_output, gate_output, alignment = self.decode(decoder_input)
@@ -524,15 +526,16 @@ class Decoder(nn.Module):
         decoder_input = self.get_go_frame(memory)
 
         self.initialize_decoder_states(memory, mask=None)
-        f0_dummy = self.get_end_f0(f0s)
-        f0s = torch.cat((f0s, f0_dummy), dim=2)
-        f0s = F.relu(self.prenet_f0(f0s))
-        f0s = f0s.permute(2, 0, 1)
-        f0s = f0s.new_zeros(f0s.size())
+#        f0_dummy = self.get_end_f0(f0s)
+#        f0s = torch.cat((f0s, f0_dummy), dim=2)
+#        f0s = F.relu(self.prenet_f0(f0s))
+#        f0s = f0s.permute(2, 0, 1)
+#        f0s = f0s.new_zeros(f0s.size())
+        f0 = memory.new_zeros(memory.size(0), self.prenet_f0_dim)
 
         mel_outputs, gate_outputs, alignments = [], [], []
         for i in range(len(attention_map)):
-            f0 = f0s[i]
+#            f0 = f0s[i]
             attention = attention_map[i]
             decoder_input = torch.cat((self.prenet(decoder_input), f0), dim=1)
             mel_output, gate_output, alignment = self.decode(decoder_input, attention)
@@ -624,10 +627,11 @@ class Tacotron2(nn.Module):
             output_lengths)
 
     def inference(self, inputs):
-        text, style_input, speaker_ids, f0s = inputs
+        text, style_input = inputs
         embedded_inputs = self.embedding(text).transpose(1, 2)
         embedded_text = self.encoder.inference(embedded_inputs)
-        embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
+        #embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
+        embedded_speakers = embedded_text.new_zeros(embedded_text.size(0), 1, self.speaker_embedding_dim)
         if hasattr(self, 'gst'):
             if isinstance(style_input, int):
                 query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
@@ -647,7 +651,7 @@ class Tacotron2(nn.Module):
                 (embedded_text, embedded_speakers), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder.inference(
-            encoder_outputs, f0s)
+            encoder_outputs, None)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
@@ -656,6 +660,7 @@ class Tacotron2(nn.Module):
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
 
     def inference_noattention(self, inputs):
+        # should not be used
         text, style_input, speaker_ids, f0s, attention_map = inputs
         embedded_inputs = self.embedding(text).transpose(1, 2)
         embedded_text = self.encoder.inference(embedded_inputs)
