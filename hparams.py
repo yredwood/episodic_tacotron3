@@ -16,7 +16,7 @@ def create_hparams(hparams_string=None, verbose=False):
         fp16_run=False,
         distributed_run=False,
         dist_backend="nccl",
-        dist_url="tcp://localhost:54323",
+        dist_url="tcp://localhost:54324",
         cudnn_enabled=True,
         cudnn_benchmark=False,
         ignore_layers=['speaker_embedding.weight'],
@@ -112,6 +112,10 @@ def create_hparams(hparams_string=None, verbose=False):
         grad_clip_thresh=1.0,
         batch_size=32,
         mask_padding=True,  # set model's padded outputs to padded values
+
+
+        # episodic training hparams
+        episodic_training = False,
 
     )
 

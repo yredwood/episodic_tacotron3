@@ -434,23 +434,22 @@ class Decoder(nn.Module):
         decoder_inputs = self.prenet(decoder_inputs)
 
         # audio features
-        f0_dummy = self.get_end_f0(f0s)
-        f0s = torch.cat((f0s, f0_dummy), dim=2)
-        f0s = F.relu(self.prenet_f0(f0s))
-        f0s = f0s.permute(2, 0, 1)
-        f0s = f0s.new_zeros(f0s.size())
-
+#        f0_dummy = self.get_end_f0(f0s)
+#        f0s = torch.cat((f0s, f0_dummy), dim=2)
+#        f0s = F.relu(self.prenet_f0(f0s))
+#        f0s = f0s.permute(2, 0, 1)
+#        f0s = f0s.new_zeros(f0s.size())
+        f0 = memory.new_zeros(memory.size(0), self.prenet_f0_dim)
+        
         self.initialize_decoder_states(
             memory, mask=~get_mask_from_lengths(memory_lengths))
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
             if len(mel_outputs) == 0 or np.random.uniform(0.0, 1.0) <= self.p_teacher_forcing:
-                decoder_input = torch.cat((decoder_inputs[len(mel_outputs)],
-                                           f0s[len(mel_outputs)]), dim=1)
+                decoder_input = torch.cat((decoder_inputs[len(mel_outputs)], f0), dim=1)
             else:
-                decoder_input = torch.cat((self.prenet(mel_outputs[-1]),
-                                           f0s[len(mel_outputs)]), dim=1)
+                decoder_input = torch.cat((self.prenet(mel_outputs[-1]), f0), dim=1)
             mel_output, gate_output, attention_weights = self.decode(
                 decoder_input)
             mel_outputs += [mel_output.squeeze(1)]
@@ -575,7 +574,7 @@ class Tacotron2(nn.Module):
 
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, \
-            output_lengths, speaker_ids, f0_padded = batch
+            output_lengths, speaker_ids, filename = batch
         text_padded = to_gpu(text_padded).long()
         input_lengths = to_gpu(input_lengths).long()
         max_len = torch.max(input_lengths.data).item()
@@ -583,9 +582,9 @@ class Tacotron2(nn.Module):
         gate_padded = to_gpu(gate_padded).float()
         output_lengths = to_gpu(output_lengths).long()
         speaker_ids = to_gpu(speaker_ids.data).long()
-        f0_padded = to_gpu(f0_padded).float()
+        #f0_padded = to_gpu(f0_padded).float()
         return ((text_padded, input_lengths, mel_padded, max_len,
-                 output_lengths, speaker_ids, f0_padded),
+                 output_lengths, speaker_ids, filename),
                 (mel_padded, gate_padded))
 
     def parse_output(self, outputs, output_lengths=None):
@@ -604,6 +603,7 @@ class Tacotron2(nn.Module):
         inputs, input_lengths, targets, max_len, \
             output_lengths, speaker_ids, f0s = inputs
         input_lengths, output_lengths = input_lengths.data, output_lengths.data
+        
 
         embedded_inputs = self.embedding(inputs).transpose(1, 2)
         embedded_text = self.encoder(embedded_inputs, input_lengths)
