@@ -26,7 +26,9 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
+import math
 
+import pdb
 
 class ReferenceEncoder(nn.Module):
     '''
@@ -161,19 +163,20 @@ class TransformerStyleTokenLayer(nn.Module):
         self.encoder = ReferenceEncoder(hp)
         self.stl = STL(hp)
 
-        self.senctence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
-                hidden_size=hp.encoder_embedding_dim, batch_first=True)
+        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
+                hidden_size=hp.sentence_encoder_dim, batch_first=True)
 
 
-        self.mab = MAB_qkv(hp.encoder_embedding_dim,
-                hp.encoder_embedding_dim,
-                hp.ref_enc_gru_size, 
+        self.mab = MAB_qkv(hp.sentence_encoder_dim,
+                hp.sentence_encoder_dim,
+                hp.token_embedding_size, 
                 hp.token_embedding_size, num_heads=hp.num_heads)
 
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         enc_out = self.encoder(rmel)
         style_embed = self.stl(enc_out) # bsz_s, 1, token_embedding_size
+        style_embed = style_embed.transpose(0,1).repeat(text.size(0),1,1)
 
         text_len = text_len.cpu().numpy()
         _tp = nn.utils.rnn.pack_padded_sequence(text, text_len, batch_first=True)
@@ -184,7 +187,7 @@ class TransformerStyleTokenLayer(nn.Module):
         _rtp = nn.utils.rnn.pack_padded_sequence(rtext, rtext_len, batch_first=True)
         _, key = self.sentence_encoder(_rtp) # 1, bsz_s, encoder_embedding_dim
 
-        style, attn = self.mab(query.transpose(0,1), key.repeat(query.size(0),1,1),
+        style, attn = self.mab(query.transpose(0,1), key.repeat(query.size(1),1,1),
                 style_embed, get_attn=True)
         
         # bsz, 1, token_embedding_size
@@ -192,6 +195,44 @@ class TransformerStyleTokenLayer(nn.Module):
 
 
 
+class MAB_qkv(nn.Module):
+    def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=4, ln=False, p=None):
+        super().__init__()
+        self.num_heads = num_heads
+        self.fc_q = nn.Linear(dim_q, dim)
+        self.fc_k = nn.Linear(dim_k, dim)
+        self.fc_v = nn.Linear(dim_v, dim)
+        self.fc_o = nn.Linear(dim, dim)
+
+        self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
+        self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()
+        self.dropout1 = nn.Dropout(p=p) if p is not None else nn.Identity()
+        self.dropout2 = nn.Dropout(p=p) if p is not None else nn.Identity()
+
+
+    def forward(self, query, key, value, mask=None, get_attn=False):
+        Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)
+        Q_ = torch.cat(Q.chunk(self.num_heads, -1), 0)
+        K_ = torch.cat(K.chunk(self.num_heads, -1), 0)
+        V_ = torch.cat(V.chunk(self.num_heads, -1), 0)
+
+        A_logits = (Q_ @ K_.transpose(-2, -1)) /  math.sqrt(Q.shape[-1])
+        if mask is not None:
+            mask = torch.stack([mask]*Q.shape[-2], -2)
+            mask = torch.cat([mask]*self.num_heads, 0)
+            A_logits.masked_fill_(mask, -float('inf'))
+            A = torch.softmax(A_logits, -1)
+            # to prevent underflow due to no attention
+            A.masked_fill_(torch.isnan(A), 0.0)
+        else:
+            A = torch.softmax(A_logits, -1)
+        
+        attn = torch.cat((A @ V_).chunk(self.num_heads, 0), -1)
+        O = self.ln1(Q + self.dropout1(attn))
+        O = self.ln2(O + self.dropout2(F.relu(self.fc_o(O))))
+        if get_attn:
+            return O, A
+        return O
 
 
 
