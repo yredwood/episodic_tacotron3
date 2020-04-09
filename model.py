@@ -633,7 +633,7 @@ class Tacotron2(nn.Module):
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         return self.parse_output(
-            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
+            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments, None],
             output_lengths)
 
     def inference(self, inputs):
@@ -767,7 +767,11 @@ class EpisodicTacotronTransformer(Tacotron2):
         s_mel_length      = to_gpu(batch['support']['output_lengths']).long()
         s_gate_padded     = to_gpu(batch['support']['gate_padded']).float()
 
-        y = (q_mel_padded, q_gate_padded)
+        # get style embedding
+        style_target = self.gst.encoder(q_mel_padded) 
+        style_target = self.gst.stl(style_target) # bsz,1,token_embedding_size
+
+        y = (q_mel_padded, q_gate_padded, style_target.squeeze(1))
         x = {
             'query': (q_text_padded, q_text_length, q_mel_padded, q_mel_length),
             'support': (s_text_padded, s_text_length, s_mel_padded, s_mel_length),
@@ -803,7 +807,8 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
-        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
+            style_embedding[:,0]],
                 query_set[3].data)
                 
         return out

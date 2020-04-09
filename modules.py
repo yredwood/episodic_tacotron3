@@ -87,7 +87,8 @@ class STL(nn.Module):
     def __init__(self, hp):
         super().__init__()
         self.embed = nn.Parameter(torch.FloatTensor(hp.token_num, hp.token_embedding_size // hp.num_heads))
-        d_q = hp.token_embedding_size // 2
+        #d_q = hp.token_embedding_size // 2
+        d_q = hp.ref_enc_gru_size
         d_k = hp.token_embedding_size // hp.num_heads
         self.attention = MultiHeadAttention(
             query_dim=d_q, key_dim=d_k, num_units=hp.token_embedding_size,
@@ -148,11 +149,13 @@ class GST(nn.Module):
     def __init__(self, hp):
         super().__init__()
         self.encoder = ReferenceEncoder(hp)
-        self.stl = STL(hp)
+        #self.stl = STL(hp)
+        self.stl = nn.Linear(hp.ref_enc_gru_size, hp.token_embedding_size)
 
     def forward(self, inputs):
         enc_out = self.encoder(inputs)
-        style_embed = self.stl(enc_out)
+        #style_embed = self.stl(enc_out)
+        style_embed = self.stl(enc_out).unsqueeze(1)
 
         return style_embed
 
@@ -161,26 +164,32 @@ class TransformerStyleTokenLayer(nn.Module):
     def __init__(self, hp):
         super().__init__()
         self.encoder = ReferenceEncoder(hp)
-        self.stl = STL(hp)
+        #self.stl = STL(hp)
+        self.stl = nn.Linear(hp.ref_enc_gru_size, hp.token_embedding_size)
 
         self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
                 hidden_size=hp.sentence_encoder_dim, batch_first=True)
 
-
         self.mab = MAB_qkv(hp.sentence_encoder_dim,
                 hp.sentence_encoder_dim,
                 hp.token_embedding_size, 
-                hp.token_embedding_size, num_heads=hp.num_heads)
+                hp.token_embedding_size, num_heads=1)
+
+#        self.ddim = hp.token_embedding_size
+#        pass
 
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         enc_out = self.encoder(rmel)
         style_embed = self.stl(enc_out) # bsz_s, 1, token_embedding_size
-        style_embed = style_embed.transpose(0,1).repeat(text.size(0),1,1)
+        style_embed = style_embed.unsqueeze(0).repeat(text.size(0),1,1)
+        #style_embed = style_embed.transpose(0,1).repeat(text.size(0),1,1)
+#        style_embed = self.stl(enc_out)
+#        style_embed = style_embed.transpose(0,1).repeat(text.size(0),1,1)
 
+        self.sentence_encoder.flatten_parameters()
         text_len = text_len.cpu().numpy()
         _tp = nn.utils.rnn.pack_padded_sequence(text, text_len, batch_first=True)
-        self.sentence_encoder.flatten_parameters()
         _, query = self.sentence_encoder(_tp) # 1, bsz, encoder_embedding_dim
 
         rtext_len = rtext_len.cpu().numpy()
@@ -189,14 +198,52 @@ class TransformerStyleTokenLayer(nn.Module):
 
         style, attn = self.mab(query.transpose(0,1), key.repeat(query.size(1),1,1),
                 style_embed, get_attn=True)
+        attn = attn.reshape(style.size(0), -1, attn.size(-1)).mean(1)
+        entropy = torch.log(attn).mean()
+        #print (attn.squeeze().data.cpu().numpy())
+        print ('NENT: {:.4f}'.format(-entropy.data.cpu().numpy()))
+        print (attn.argmax(-1).squeeze().data.cpu().numpy())
+        
+
+#        Q = query.transpose(0,1)
+#        K = key.repeat(text.size(0), 1, 1).transpose(1,2)
+#        mattn = (Q@K)/math.sqrt(Q.size(-1))
+#        pdb.set_trace()
         
         # bsz, 1, token_embedding_size
-        return style
+        enc_out = self.encoder(rmel)
+        style_embed = self.stl(enc_out)
+        return style_embed
 
+#        style = text.new_zeros(text.size(0), 1, self.ddim)
+#        return style
 
 
 class MAB_qkv(nn.Module):
-    def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=4, ln=False, p=None):
+    def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=8, ln=False, p=None):
+        super().__init__()
+        self.num_heads = num_heads
+        self.fc_q = nn.Linear(dim_q, dim)
+        self.fc_k = nn.Linear(dim_k, dim)
+        self.fc_v = nn.Linear(dim_v, dim)
+        self.fc_o = nn.Linear(dim, dim)
+        self.T = nn.Parameter(torch.Tensor(1))
+        nn.init.constant_(self.T, 100.)
+
+    def forward(self, query, key, value, get_attn=False):
+        Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)
+        A_logits = Q @ K.transpose(-2,-1) / math.sqrt(query.size(-1)) * self.T
+        #A_logits = query @ key.transpose(-2,-1) / math.sqrt(query.size(-1)) * self.T
+        A = torch.softmax(A_logits, -1)
+        attn = A @ value
+        out = self.fc_o(attn)
+        if get_attn:
+            return out, A
+        return out
+
+
+class _MAB_qkv(nn.Module):
+    def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=8, ln=False, p=None):
         super().__init__()
         self.num_heads = num_heads
         self.fc_q = nn.Linear(dim_q, dim)
@@ -216,7 +263,7 @@ class MAB_qkv(nn.Module):
         K_ = torch.cat(K.chunk(self.num_heads, -1), 0)
         V_ = torch.cat(V.chunk(self.num_heads, -1), 0)
 
-        A_logits = (Q_ @ K_.transpose(-2, -1)) /  math.sqrt(Q.shape[-1])
+        A_logits = (Q_ @ K_.transpose(-2, -1)) /  math.sqrt(Q.shape[-1]) * 1.
         if mask is not None:
             mask = torch.stack([mask]*Q.shape[-2], -2)
             mask = torch.cat([mask]*self.num_heads, 0)
@@ -227,12 +274,18 @@ class MAB_qkv(nn.Module):
         else:
             A = torch.softmax(A_logits, -1)
         
+#        attn = torch.cat((A @ V_).chunk(self.num_heads, 0), -1)
+#        O = self.ln1(Q + self.dropout1(attn))
+#        O = self.ln2(O + self.dropout2(F.relu(self.fc_o(O))))
+#        if get_attn:
+#            return O, A
+#        return O
         attn = torch.cat((A @ V_).chunk(self.num_heads, 0), -1)
-        O = self.ln1(Q + self.dropout1(attn))
-        O = self.ln2(O + self.dropout2(F.relu(self.fc_o(O))))
+        O = self.fc_o(attn)
         if get_attn:
             return O, A
         return O
+
 
 
 

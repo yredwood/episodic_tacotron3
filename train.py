@@ -13,7 +13,7 @@ from data_utils import EpisodicLoader, EpisodicCollater, EpisodicBatchSampler, D
 
 from model import load_model
 from data_utils import TextMelLoader, TextMelCollate
-from loss_function import Tacotron2Loss
+from loss_function import Tacotron2Loss, EpisodicLoss
 from logger import Tacotron2Logger
 from hparams import create_hparams
 
@@ -179,6 +179,7 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
 def validate(model, criterion, val_loader, iteration, batch_size, n_gpus,
              logger, distributed_run, rank):
     """Handles all the validation scoring and printing"""
+    return
     model.eval()
     with torch.no_grad():
         val_loss = 0.0
@@ -230,8 +231,11 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
 
     if hparams.distributed_run:
         model = apply_gradient_allreduce(model)
-
-    criterion = Tacotron2Loss()
+    
+    if hparams.criterion == 'episodic-loss':
+        criterion = EpisodicLoss()
+    elif hparams.criterion == 'tacotron2-loss':
+        criterion = Tacotron2Loss()
 
     logger = prepare_directories_and_logger(
         output_directory, log_directory, rank)

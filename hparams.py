@@ -121,12 +121,13 @@ def create_hparams(hparams_string=None, verbose=False):
         #model_name = 'gst-tacotron',
 
         episodic_training = True, 
-        model_name = 'episodic-transformer',
+        model_name = 'episodic-baseline', # [tacotron2, episodic-transformer, episodic-baseline]
         sentence_encoder_dim = 128,
 
         num_common = 16,
         num_support = 16,
         num_query = 16,
+        criterion = 'tacotron2-loss',  # [episodic-loss, tacotron2-loss]
 
     )
 
