@@ -120,8 +120,8 @@ def create_hparams(hparams_string=None, verbose=False):
         #episodic_training = False,
         #model_name = 'gst-tacotron',
 
-        episodic_training = True, 
-        model_name = 'episodic-baseline', # [tacotron2, episodic-transformer, episodic-baseline]
+        episodic_training = False,
+        model_name = 'tacotron2', # [tacotron2, episodic-transformer, episodic-baseline]
         sentence_encoder_dim = 128,
 
         num_common = 16,
