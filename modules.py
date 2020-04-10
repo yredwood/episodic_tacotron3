@@ -391,7 +391,7 @@ class GST(nn.Module):
         self.pre_conv = ConvEmbedding(input_dim)
         self.preconv_dim = 32 * self.pooling(input_dim)
         
-        self.lstm_hidden_dim = hp.token_embedding_size // 2
+        self.lstm_hidden_dim = (hp.token_embedding_size + hp.speaker_embedding_dim) // 2 
         self.lstm_num_layers = 4
         self.lstm = LSTM_BN(
                 input_size=self.preconv_dim,
