@@ -7,6 +7,7 @@ from data_utils import TextMelLoader, TextMelCollate
 from torch.utils.data import DataLoader
 from hparams import create_hparams
 from tqdm import tqdm
+import os
 
 import pdb
 # no distributed supported
@@ -27,7 +28,7 @@ def prepare_dataloaders(hparams):
     return train_loader, valset, collate_fn, train_sampler
 
 
-def run(ckpt_path):
+def run(output_dir, ckpt_path, hparams):
 
     model = load_model(hparams)
     checkpoint_dict = torch.load(ckpt_path, map_location='cpu')
@@ -39,18 +40,27 @@ def run(ckpt_path):
     for batch in tqdm(train_loader):
 
         text, _, mel, _, _, _, fname = batch
-        _, mel_pred, _, attn = model.inference((text.cuda(), mel.cuda()))
-        
-        pdb.set_trace()
-        output_fname = fname[0].replace('.wav', '-kkr2.mel')
+        #_, mel_pred, _, attn = model.inference((text.cuda(), mel.cuda()))
+
+        x, y = model.parse_batch(batch)
+        y_pred = model(x)
+        mel_pred = y_pred[0]
+
+
+
+        wavname = fname[0].split('/')[-1]
+        output_fname = os.path.join(output_dir, wavname.replace('.wav', '-mel.npy'))
+
         mel = mel_pred[0].data.cpu().numpy()
         np.save(output_fname, mel)
 
 
 if __name__ == '__main__':
-
-    ckpt_path = 'models/original_mellotron_nof0nosp_transpose_from_pretrained/checkpoint_17000'
+        
+    output_dir = 'data-bin/output-mel'
+    ckpt_path = 'models/gst_las/checkpoint_20000'
     
     hparams = create_hparams()
     hparams.batch_size = 1
-    run(ckpt_path)
+    hparams.p_teacher_forcing = 1.0
+    run(output_dir, ckpt_path, hparams)
