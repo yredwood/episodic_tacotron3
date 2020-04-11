@@ -164,29 +164,27 @@ class _GST(nn.Module):
 class TransformerStyleTokenLayer(nn.Module):
     def __init__(self, hp):
         super().__init__()
-        self.encoder = ReferenceEncoder(hp)
+#        self.encoder = ReferenceEncoder(hp)
         #self.stl = STL(hp)
-        self.stl = nn.Linear(hp.ref_enc_gru_size, hp.token_embedding_size)
+#        self.stl = nn.Linear(hp.ref_enc_gru_size, hp.token_embedding_size)
 
-        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
-                hidden_size=hp.sentence_encoder_dim, batch_first=True)
+        self.gst = GST(hp)
 
-        self.mab = MAB_qkv(hp.sentence_encoder_dim,
-                hp.sentence_encoder_dim,
-                hp.token_embedding_size, 
-                hp.token_embedding_size, num_heads=1)
-
-#        self.ddim = hp.token_embedding_size
-#        pass
-
+#        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
+#                hidden_size=hp.sentence_encoder_dim, batch_first=True)
+#
+#        self.mab = MAB_qkv(hp.sentence_encoder_dim,
+#                hp.sentence_encoder_dim,
+#                hp.token_embedding_size, 
+#                hp.token_embedding_size, num_heads=1)
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
-        enc_out = self.encoder(rmel)
-        style_embed = self.stl(enc_out) # bsz_s, 1, token_embedding_size
-        style_embed = style_embed.unsqueeze(0).repeat(text.size(0),1,1)
-        #style_embed = style_embed.transpose(0,1).repeat(text.size(0),1,1)
-#        style_embed = self.stl(enc_out)
-#        style_embed = style_embed.transpose(0,1).repeat(text.size(0),1,1)
+        style_embed = self.gst(rmel)
+        return style_embed
+
+    def _forward(self, text, text_len, rtext, rtext_len, rmel):
+        style_embed = self.gst(rmel) # bsz_s,1,token_embed_size
+        style_embed.transpose(0,1).repeat(text.size(0),1,1)
 
         self.sentence_encoder.flatten_parameters()
         text_len = text_len.cpu().numpy()
@@ -201,11 +199,11 @@ class TransformerStyleTokenLayer(nn.Module):
                 style_embed, get_attn=True)
         attn = attn.reshape(style.size(0), -1, attn.size(-1)).mean(1)
         entropy = torch.log(attn).mean()
+
         #print (attn.squeeze().data.cpu().numpy())
         print ('NENT: {:.4f} | TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(),
-            self.mab.T.data.cpu().numpy()))
+            self.mab.T.item()))
         print (attn.argmax(-1).squeeze().data.cpu().numpy())
-        
 
 #        Q = query.transpose(0,1)
 #        K = key.repeat(text.size(0), 1, 1).transpose(1,2)
@@ -213,13 +211,7 @@ class TransformerStyleTokenLayer(nn.Module):
 #        pdb.set_trace()
         
         # bsz, 1, token_embedding_size
-        enc_out = self.encoder(rmel)
-        style_embed = self.stl(enc_out)
-        return style_embed
-
-#        style = text.new_zeros(text.size(0), 1, self.ddim)
-#        return style
-
+        return style
 
 class MAB_qkv(nn.Module):
     def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=8, ln=False, p=None):
@@ -230,7 +222,7 @@ class MAB_qkv(nn.Module):
         self.fc_v = nn.Linear(dim_v, dim)
         self.fc_o = nn.Linear(dim, dim)
         self.T = nn.Parameter(torch.Tensor(1))
-        nn.init.constant_(self.T, 100.)
+        nn.init.constant_(self.T, 10.)
 
     def forward(self, query, key, value, get_attn=False):
         Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)

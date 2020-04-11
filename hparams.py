@@ -127,7 +127,7 @@ def create_hparams(hparams_string=None, verbose=False):
         num_common = 16,
         num_support = 16,
         num_query = 16,
-        criterion = 'episodic-loss',  # [episodic-loss, tacotron2-loss]
+        criterion = 'tacotron2-loss',  # [episodic-loss, tacotron2-loss]
 
     )
 
