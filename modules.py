@@ -202,7 +202,8 @@ class TransformerStyleTokenLayer(nn.Module):
         attn = attn.reshape(style.size(0), -1, attn.size(-1)).mean(1)
         entropy = torch.log(attn).mean()
         #print (attn.squeeze().data.cpu().numpy())
-        print ('NENT: {:.4f}'.format(-entropy.data.cpu().numpy()))
+        print ('NENT: {:.4f} | TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(),
+            self.mab.T.data.cpu().numpy()))
         print (attn.argmax(-1).squeeze().data.cpu().numpy())
         
 
