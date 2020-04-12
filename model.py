@@ -760,9 +760,9 @@ class EpisodicTacotronTransformer(Tacotron2):
         # get style embedding
         #style_target = self.gst.encoder(q_mel_padded) 
         #style_target = self.gst.stl(style_target) # bsz,1,token_embedding_size
-        style_target = None
+        style_target = self.gst.get_style(q_mel_padded)
 
-        y = (q_mel_padded, q_gate_padded, style_target)
+        y = (q_mel_padded, q_gate_padded, style_target.squeeze(1))
         x = {
             'query': (q_text_padded, q_text_length, q_mel_padded, q_mel_length),
             'support': (s_text_padded, s_text_length, s_mel_padded, s_mel_length),
@@ -798,6 +798,36 @@ class EpisodicTacotronTransformer(Tacotron2):
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
             style_embedding[:,0]],
                 query_set[3].data)
+                
+        return out
+
+    def inference(self, inputs):
+        query_set = inputs['query']
+        support_set = inputs['support']
+
+        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+        # bsz, t, token_dim
+
+        support_text_embedding = self.embedding(support_set[0]).transpose(1,2)
+        support_text_embedding = self.encoder(support_text_embedding, support_set[1].data)
+        # bsz_s, t_s, token_dim
+
+        style_embedding = self.gst(query_text_embedding, query_set[1],
+                support_text_embedding, support_set[1],
+                support_set[2])
+        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+
+        encoder_outputs = torch.cat(
+                (query_text_embedding, style_embedding), dim=2)
+
+        mel_outputs, gate_outputs, alignments = self.decoder.inference(
+                encoder_outputs, None)
+
+        mel_outputs_postnet = self.postnet(mel_outputs)
+        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
                 
         return out
 

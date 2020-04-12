@@ -164,27 +164,27 @@ class _GST(nn.Module):
 class TransformerStyleTokenLayer(nn.Module):
     def __init__(self, hp):
         super().__init__()
-#        self.encoder = ReferenceEncoder(hp)
-        #self.stl = STL(hp)
-#        self.stl = nn.Linear(hp.ref_enc_gru_size, hp.token_embedding_size)
 
         self.gst = GST(hp)
+        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
+                hidden_size=hp.sentence_encoder_dim, batch_first=True)
 
-#        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
-#                hidden_size=hp.sentence_encoder_dim, batch_first=True)
-#
-#        self.mab = MAB_qkv(hp.sentence_encoder_dim,
-#                hp.sentence_encoder_dim,
-#                hp.token_embedding_size, 
-#                hp.token_embedding_size, num_heads=1)
+        self.mab = MAB_qkv(hp.sentence_encoder_dim,
+                hp.sentence_encoder_dim,
+                hp.token_embedding_size + hp.speaker_embedding_dim, 
+                hp.token_embedding_size + hp.speaker_embedding_dim, num_heads=1)
 
-    def forward(self, text, text_len, rtext, rtext_len, rmel):
+        self.pre_conv = self.gst.pre_conv
+        self.lstm = self.gst.lstm
+
+    def get_style(self, rmel):
         style_embed = self.gst(rmel)
         return style_embed
 
-    def _forward(self, text, text_len, rtext, rtext_len, rmel):
-        style_embed = self.gst(rmel) # bsz_s,1,token_embed_size
-        style_embed.transpose(0,1).repeat(text.size(0),1,1)
+    def forward(self, text, text_len, rtext, rtext_len, rmel):
+        _style_embed = self.get_style(rmel)
+        # bsz_s,1,token_embed_size
+        style_embed = _style_embed.transpose(0,1).repeat(text.size(0),1,1)
 
         self.sentence_encoder.flatten_parameters()
         text_len = text_len.cpu().numpy()
@@ -208,7 +208,6 @@ class TransformerStyleTokenLayer(nn.Module):
 #        Q = query.transpose(0,1)
 #        K = key.repeat(text.size(0), 1, 1).transpose(1,2)
 #        mattn = (Q@K)/math.sqrt(Q.size(-1))
-#        pdb.set_trace()
         
         # bsz, 1, token_embedding_size
         return style
@@ -222,7 +221,7 @@ class MAB_qkv(nn.Module):
         self.fc_v = nn.Linear(dim_v, dim)
         self.fc_o = nn.Linear(dim, dim)
         self.T = nn.Parameter(torch.Tensor(1))
-        nn.init.constant_(self.T, 10.)
+        nn.init.constant_(self.T, 1.)
 
     def forward(self, query, key, value, get_attn=False):
         Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)
@@ -243,7 +242,7 @@ class _MAB_qkv(nn.Module):
         self.fc_q = nn.Linear(dim_q, dim)
         self.fc_k = nn.Linear(dim_k, dim)
         self.fc_v = nn.Linear(dim_v, dim)
-        self.fc_o = nn.Linear(dim, dim)
+        self.fc_o = nn.Linear(dim, dim, bias=True)
 
         self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
         self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()

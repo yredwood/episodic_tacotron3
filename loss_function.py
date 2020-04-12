@@ -36,4 +36,4 @@ class EpisodicLoss(nn.Module):
         gate_loss = nn.BCEWithLogitsLoss()(gate_out, gate_target)
         
         style_loss = nn.MSELoss()(style_embedding, style_target)
-        return mel_loss + gate_loss + style_loss
+        return mel_loss + gate_loss
