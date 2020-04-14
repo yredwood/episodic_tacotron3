@@ -160,6 +160,90 @@ class _GST(nn.Module):
 
         return style_embed
 
+class DualTransformerBaseline(nn.Module):
+    def __init__(self, hp):
+        super().__init__()
+
+        self.gst = GST(hp) # token_embedding_size
+        self.num_heads = 1
+            
+        self.pma = PMA(hp.token_embedding_size,
+                num_heads=self.num_heads, num_seeds=1) # single general speaker style
+
+        self.pma_post = nn.Linear(hp.token_embedding_size, hp.speaker_embedding_dim)
+
+        self.pre_conv = self.gst.pre_conv # for restore pretrained model
+        self.lstm = self.gst.lstm
+
+    def get_style(self, rmel):
+        return self.gst(rmel)
+
+    def forward(self, text, text_len, rtext, rtext_len, rmel):
+        # rmel == same as query set
+        style_embed = self.get_style(rmel) # bsz, 1, dim
+        
+        # global style
+        global_style = self.pma(style_embed.transpose(0,1)).repeat(text.size(0),1,1)
+        global_style = self.pma_post(global_style)
+
+        style_token = torch.cat((style_embed, global_style), dim=-1)
+        return style_token 
+        
+
+class DualTransformerStyleLayer(nn.Module):
+    def __init__(self, hp):
+        super().__init__()
+
+        self.gst = GST(hp)
+        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
+                hidden_size=hp.sentence_encoder_dim, batch_first=True)
+        
+        self.num_heads = 1
+        self.mab = MAB_qkv(hp.sentence_encoder_dim,
+                hp.sentence_encoder_dim,
+                hp.token_embedding_size + hp.speaker_embedding_dim,
+                hp.token_embedding_size + hp.speaker_embedding_dim, num_heads=self.num_heads) # sentence specific style
+            
+        self.pma = PMA(hp.token_embedding_size + hp.speaker_embedding_dim,
+                num_heads=self.num_heads, num_seeds=1) # single general speaker style
+
+        self.pre_conv = self.gst.pre_conv # for restore pretrained model
+        self.lstm = self.gst.lstm
+
+    def get_style(self, rmel):
+        style_embed = self.gst(rmel)
+        return style_embed
+
+    def forward(self, text, text_len, rtext, rtext_len, rmel):
+        # get text specific style token
+        _style_embed = self.get_style(rmel) # bsz_s, 1, dim
+        style_embed = _style_embed.transpose(0,1).repeat(text.size(0),1,1) # bsz, bsz_s, dim
+
+        self.sentence_encoder.flatten_parameters()
+        text_len = text_len.cpu().numpy()
+        _tp = nn.utils.rnn.pack_padded_sequence(text, text_len, batch_first=True)
+        _, query = self.sentence_encoder(_tp) # 1, bsz, encoder_embedding_dim
+
+        rtext_len = rtext_len.cpu().numpy()
+        _rtp = nn.utils.rnn.pack_padded_sequence(rtext, rtext_len, batch_first=True)
+        _, key = self.sentence_encoder(_rtp) # 1, bsz_s, encoder_embedding_dim
+
+        text_specific_style, attn = self.mab(query.transpose(0,1), key.repeat(query.size(1),1,1),
+                style_embed, get_attn=True)
+        text_specific_style = F.dropout(text_specific_style, p=0.5, training=self.training)
+
+        entropy = torch.log(attn).mean()
+        print ('NENT: {:.4f} | TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(),
+            self.mab.T.item()))
+        print (attn.argmax(-1).squeeze().data.cpu().numpy())
+
+        #qkv = _style_embed.transpose(0,1) # 1,bsz_s,dim
+        general_style = self.pma(_style_embed.transpose(0,1)) # 1,1,dim
+
+        style_embed = torch.tanh(text_specific_style) + torch.tanh(general_style)
+        return style_embed
+
+
 
 class TransformerStyleTokenLayer(nn.Module):
     def __init__(self, hp):
@@ -203,7 +287,8 @@ class TransformerStyleTokenLayer(nn.Module):
         #print (attn.squeeze().data.cpu().numpy())
         print ('NENT: {:.4f} | TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(),
             self.mab.T.item()))
-        print (attn.argmax(-1).squeeze().data.cpu().numpy())
+        #print (attn.argmax(-1).squeeze().data.cpu().numpy())
+        print (attn.squeeze().data.cpu().numpy())
 
 #        Q = query.transpose(0,1)
 #        K = key.repeat(text.size(0), 1, 1).transpose(1,2)
@@ -232,6 +317,21 @@ class MAB_qkv(nn.Module):
         out = self.fc_o(attn)
         if get_attn:
             return out, A
+        return out
+
+class PMA(nn.Module):
+    def __init__(self, dim, num_heads, num_seeds, ln=False):
+        super(PMA, self).__init__()
+        self.S = nn.Parameter(torch.Tensor(1, num_seeds, dim))
+        nn.init.xavier_uniform_(self.S)
+        self.mab1 = MAB_qkv(dim, dim, dim, dim, num_heads, ln=ln)
+        self.mab2 = MAB_qkv(dim, dim, dim, dim, num_heads, ln=ln)
+    
+    def forward(self, X):
+        # X.size = (bsz, set_size, dim)
+        val = self.mab1(X,X,X) # (bsz,set_size,dim)
+        kq = self.S.repeat(X.size(0),1,1)
+        out = self.mab2(kq, val, val)
         return out
 
 
@@ -383,7 +483,7 @@ class GST(nn.Module):
         self.pre_conv = ConvEmbedding(input_dim)
         self.preconv_dim = 32 * self.pooling(input_dim)
         
-        self.lstm_hidden_dim = (hp.token_embedding_size + hp.speaker_embedding_dim) // 2 
+        self.lstm_hidden_dim = (hp.token_embedding_size) // 2 
         self.lstm_num_layers = 4
         self.lstm = LSTM_BN(
                 input_size=self.preconv_dim,
@@ -423,8 +523,6 @@ class GST(nn.Module):
 
         return final_outs.unsqueeze(1)
 
-
-        
 
     def pooling(self, x):
         for _ in range(len(self.pre_conv.backbone)):

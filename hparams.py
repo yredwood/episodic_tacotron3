@@ -105,7 +105,7 @@ def create_hparams(hparams_string=None, verbose=False):
         # Optimization Hyperparameters #
         ################################
         use_saved_learning_rate=False,
-        learning_rate=1e-4,
+        learning_rate=1e-3,
         learning_rate_min=1e-5,
         learning_rate_anneal=65000,
         weight_decay=1e-6,
@@ -122,6 +122,7 @@ def create_hparams(hparams_string=None, verbose=False):
 
         episodic_training = True,
         model_name = 'episodic-transformer', # [gst-tacotron, episodic-transformer, episodic-baseline]
+        transformer_type = 'dual_baseline',
         sentence_encoder_dim = 128,
 
         num_common = 8,

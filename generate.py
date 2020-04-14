@@ -26,11 +26,11 @@ import pdb
 
 # ========== parameters ===========
 checkpoint_path = 'models/bigger_gst_with_speakerembeddim_lr1e-3_episodic/checkpoint_50000'
-checkpoint_path = 'models/gst_transformer_pretrained/checkpoint_20000'
+checkpoint_path = 'models/gst_transformer_pretrained-anealedfrom45k/checkpoint_50000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'
-num_support_save = 2
+num_support_save = 5
 
 test_text_list = [
     'AITRICS leads the race to optimized precision care, strengthening and trust.',
@@ -266,7 +266,7 @@ else:
 #        print (idx, text)
     
         cnt += 1
-        if cnt > 1:
+        if cnt > num_support_save:
             break
 
     

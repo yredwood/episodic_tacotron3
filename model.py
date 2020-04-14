@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 from layers import ConvNorm, LinearNorm
 from utils import to_gpu, get_mask_from_lengths
-from modules import GST, TransformerStyleTokenLayer
+from modules import GST, TransformerStyleTokenLayer, DualTransformerStyleLayer, DualTransformerBaseline
 import pdb
 
 drop_rate = 0.5
@@ -578,6 +578,7 @@ class Tacotron2(nn.Module):
         self.postnet = Postnet(hparams)
         if hparams.with_gst:
             self.gst = GST(hparams)
+        print ('tacotron 2 inited')
 
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, \
@@ -738,10 +739,21 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.encoder = Encoder(hparams)
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams)
-        self.gst = TransformerStyleTokenLayer(hparams)
+        if hparams.transformer_type == 'single':
+            self.gst = TransformerStyleTokenLayer(hparams)
+            self.forward = self._forward
+        elif hparams.transformer_type == 'dual':
+            self.gst = DualTransformerStyleLayer(hparams)
+            self.forward = self._forward
+        elif hparams.transformer_type == 'dual_baseline':
+            self.gst = DualTransformerBaseline(hparams)
+            self.forward = self._dual_baseline_forward
+            
 #        self.speaker_embedding = nn.Embedding(
 #            hparams.n_speakers, hparams.speaker_embedding_dim)
         self.speaker_embedding_dim = hparams.speaker_embedding_dim
+        self.token_embedding_size = hparams.token_embedding_size
+        print ('episodic tacotron transformer inited')
 
     def parse_batch(self, batch):
 
@@ -769,7 +781,34 @@ class EpisodicTacotronTransformer(Tacotron2):
         }
         return (x, y)
 
-    def forward(self, inputs):
+    def _dual_baseline_forward(self, inputs):
+        # only use query set
+        query_set = inputs['query']
+
+        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+
+        style_embedding = self.gst(query_text_embedding, None,
+                None, None, query_set[2])
+        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+
+        encoder_outputs = torch.cat(
+                (query_text_embedding, style_embedding), dim=2)
+
+        mel_outputs, gate_outputs, alignments = self.decoder(
+                encoder_outputs, query_set[2], memory_lengths=query_set[1].data, f0s=None)
+
+        mel_outputs_postnet = self.postnet(mel_outputs)
+        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
+            style_embedding[:,0,:self.token_embedding_size]],
+                query_set[3].data)
+
+        return out
+
+
+    def _forward(self, inputs):
         query_set = inputs['query']
         support_set = inputs['support']
 
@@ -864,7 +903,27 @@ class EpisodicTacotronTransformer(Tacotron2):
 
 
 
-
+#class EpisodicDualTransformer(EpisodicTacotronTransformer):
+#    def __init__(self, hparams):
+#        super(Tacotron2, self).__init__()
+#        self.mask_padding = hparams.mask_padding
+#        self.fp16_run = hparams.fp16_run
+#        self.n_mel_channels = hparams.n_mel_channels
+#        self.n_frames_per_step = hparams.n_frames_per_step
+#        self.embedding = nn.Embedding(
+#            hparams.n_symbols, hparams.symbols_embedding_dim)
+#        std = sqrt(2.0 / (hparams.n_symbols + hparams.symbols_embedding_dim))
+#        val = sqrt(3.0) * std  # uniform bounds for std
+#        self.embedding.weight.data.uniform_(-val, val)
+#        self.encoder = Encoder(hparams)
+#        self.decoder = Decoder(hparams)
+#        self.postnet = Postnet(hparams)
+#        self.gst = TransformerStyleTokenLayer(hparams)
+##        self.speaker_embedding = nn.Embedding(
+##            hparams.n_speakers, hparams.speaker_embedding_dim)
+#        self.speaker_embedding_dim = hparams.speaker_embedding_dim
+#
+#        print ('episodic dual transformer inited')
 
 
 
