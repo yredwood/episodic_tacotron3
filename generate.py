@@ -25,10 +25,10 @@ import pdb
 
 
 # ========== parameters ===========
-#checkpoint_path = 'models/transformer4_pretrained/checkpoint_14000'
-checkpoint_path = 'models/bigger_gst_with_speakerembeddim_lr1e-3_episodic/checkpoint_13000'
-#waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
-waveglow_path = 'models/pretrained/waveglow_2000'
+checkpoint_path = 'models/bigger_gst_with_speakerembeddim_lr1e-3_episodic/checkpoint_50000'
+checkpoint_path = 'models/gst_transformer_pretrained/checkpoint_20000'
+waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
+#waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'
 num_support_save = 2
 
@@ -44,8 +44,9 @@ test_text_list = [
 
 use_griffin_lim = False
 
-supportset_sid = '2952'  # m
+#supportset_sid = '2952'  # m
 #supportset_sid = '1069' # f 
+supportset_sid = '8123' # f 
 output_root = 'audios'
 
 output_dir = os.path.join(
