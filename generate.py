@@ -25,8 +25,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/bigger_gst_with_speakerembeddim_lr1e-3_episodic/checkpoint_50000'
-checkpoint_path = 'models/gst_transformer_pretrained-anealedfrom45k/checkpoint_50000'
+checkpoint_path = 'models/autoencoder_laststate_tf01/checkpoint_6000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'

@@ -8,6 +8,7 @@ from torch.nn import functional as F
 from layers import ConvNorm, LinearNorm
 from utils import to_gpu, get_mask_from_lengths
 from modules import GST, TransformerStyleTokenLayer, DualTransformerStyleLayer, DualTransformerBaseline
+from modules import AutoencodingGST
 import pdb
 
 drop_rate = 0.5
@@ -742,12 +743,19 @@ class EpisodicTacotronTransformer(Tacotron2):
         if hparams.transformer_type == 'single':
             self.gst = TransformerStyleTokenLayer(hparams)
             self.forward = self._forward
+            self.inference = self._inference
         elif hparams.transformer_type == 'dual':
             self.gst = DualTransformerStyleLayer(hparams)
             self.forward = self._forward
+            self.inference = self._inference
         elif hparams.transformer_type == 'dual_baseline':
             self.gst = DualTransformerBaseline(hparams)
             self.forward = self._dual_baseline_forward
+            self.inference = self._dual_baseline_inference
+        elif hparams.transformer_type == 'autoencoder':
+            self.gst = AutoencodingGST(hparams)
+            self.forward = self._auto_forward
+            self.inference = self._autoencoder_inference
             
 #        self.speaker_embedding = nn.Embedding(
 #            hparams.n_speakers, hparams.speaker_embedding_dim)
@@ -772,14 +780,30 @@ class EpisodicTacotronTransformer(Tacotron2):
         # get style embedding
         #style_target = self.gst.encoder(q_mel_padded) 
         #style_target = self.gst.stl(style_target) # bsz,1,token_embedding_size
-        style_target = self.gst.get_style(q_mel_padded)
+        #style_target = self.gst.get_style(q_mel_padded)
 
-        y = (q_mel_padded, q_gate_padded, style_target.squeeze(1))
+        y = (q_mel_padded, q_gate_padded, None)
         x = {
             'query': (q_text_padded, q_text_length, q_mel_padded, q_mel_length),
             'support': (s_text_padded, s_text_length, s_mel_padded, s_mel_length),
         }
         return (x, y)
+
+    def _auto_forward(self, inputs):
+        query_set = inputs['query']
+
+        encoder_outputs, pooled_length = self.gst(query_set[2])
+
+        mel_outputs, gate_outputs, alignments = self.decoder(
+                encoder_outputs, query_set[2], memory_lengths=pooled_length.data, f0s=None)
+
+        mel_outputs_postnet = self.postnet(mel_outputs)
+        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
+            None], query_set[3].data)
+
+        return out
 
     def _dual_baseline_forward(self, inputs):
         # only use query set
@@ -840,7 +864,7 @@ class EpisodicTacotronTransformer(Tacotron2):
                 
         return out
 
-    def inference(self, inputs):
+    def _inference(self, inputs):
         query_set = inputs['query']
         support_set = inputs['support']
 
@@ -869,6 +893,22 @@ class EpisodicTacotronTransformer(Tacotron2):
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
                 
         return out
+
+    def _autoencoder_inference(self, inputs):
+        query_set = inputs['support']
+        rnd_idx = np.random.randint(query_set[2].size(0))
+
+        encoder_outputs, pooled_length = self.gst(query_set[2])
+
+        mel_outputs, gate_outputs, alignments = self.decoder.inference(
+                encoder_outputs[rnd_idx:rnd_idx+1], None)
+
+        mel_outputs_postnet = self.postnet(mel_outputs)
+        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
+
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
+        return out
+
 
 
 

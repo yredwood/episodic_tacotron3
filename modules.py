@@ -472,6 +472,79 @@ class LSTM_BN(nn.Module):
         return input, (hlist, clist)
 
 
+class AutoencodingGST(nn.Module):
+    def __init__(self, hp):
+        '''
+        las-style encoder
+        '''
+        super().__init__()
+
+        input_dim = hp.n_mel_channels
+        self.pre_conv = ConvEmbedding(input_dim)
+        self.preconv_dim = 32 * self.pooling(input_dim)
+        
+        self.lstm_hidden_dim = (hp.token_embedding_size + hp.encoder_embedding_dim + hp.speaker_embedding_dim) // 2 
+        self.lstm_num_layers = 4
+        self.lstm = LSTM_BN(
+                input_size=self.preconv_dim,
+                hidden_size=self.lstm_hidden_dim,
+                num_layers=self.lstm_num_layers,
+                dropout=0.1,
+                bidirectional=True,
+                shortcut=True,
+        )
+        self.output_dim = self.lstm_hidden_dim * 2
+
+    def get_style(self, x):
+        return None
+
+    def forward(self, x):
+        
+        x_len = self.calc_length(x)
+        x_emb = self.pre_conv(x) # (T,bsz,640)
+        #x_emb = F.dropout(x_emb, p=0.5, training=self.training)
+
+        pooled_length = [self.pooling(_l) for _l in x_len]
+        pooled_length = x_emb.new_tensor(pooled_length).long()
+        #assert pooled_length[0] == x_emb.size(0)
+
+        state_size = self.lstm_num_layers*2, x_emb.size(1), self.lstm_hidden_dim
+        fw_x = nn.utils.rnn.pack_padded_sequence(x_emb, pooled_length, enforce_sorted=False)
+        fw_h = x_emb.new_zeros(*state_size)
+        fw_c = x_emb.new_zeros(*state_size)
+        packed_outputs, (final_hiddens, final_cells) = self.lstm(fw_x, (fw_h, fw_c))
+
+        # not using final_h, final_c
+        #final_outs, _ = nn.utils.rnn.pad_packed_sequence(packed_outputs, padding_value=.0)
+        #final_outs = F.dropout(final_outs, p=0.5, training=self.training)
+        #return final_outs.transpose(0,1), pooled_length
+        final_outs = final_hiddens.view(-1,2,final_hiddens.size(-2),final_hiddens.size(-1))
+        final_outs = torch.cat((final_outs[-1,0], final_outs[-1,1]), dim=-1)
+            
+        num_seq = 10 
+        final_outs = final_outs.unsqueeze(1).repeat(1,num_seq,1)
+        pooled_length = pooled_length.new_zeros(final_outs.size(0)) + num_seq
+
+        return final_outs, pooled_length
+
+
+
+    def pooling(self, x):
+        for _ in range(len(self.pre_conv.backbone)):
+            #x = (x - 3 + 2 * 3//2) // 2 + 1
+            x = x // 2 
+        return x
+
+    def calc_length(self, x):
+        x_len = [x.size(-1) for _ in range(x.size(0))]
+        for t in reversed(range(x.size(-1))):
+            pads = (x[:,:,t].sum(1) == 0).int().tolist()
+            x_len = [x_len[i] - pads[i] for i in range(len(x_len))]
+
+            if sum(pads) == 0:
+                break
+        return x_len
+
 class GST(nn.Module):
     def __init__(self, hp):
         '''

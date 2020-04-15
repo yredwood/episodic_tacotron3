@@ -69,7 +69,7 @@ def create_hparams(hparams_string=None, verbose=False):
         gate_threshold=0.5,
         p_attention_dropout=0.1,
         p_decoder_dropout=0.1,
-        p_teacher_forcing=1.0,
+        p_teacher_forcing=0.1,
 
         # Attention parameters
         attention_rnn_dim=1024,
@@ -122,7 +122,7 @@ def create_hparams(hparams_string=None, verbose=False):
 
         episodic_training = True,
         model_name = 'episodic-transformer', # [gst-tacotron, episodic-transformer, episodic-baseline]
-        transformer_type = 'dual_baseline',
+        transformer_type = 'autoencoder',
         sentence_encoder_dim = 128,
 
         num_common = 8,
