@@ -25,8 +25,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/bigger_gst_with_speakerembeddim_lr1e-3_episodic/checkpoint_50000'
-checkpoint_path = 'models/gst_transformer_pretrained-anealedfrom45k/checkpoint_50000'
+checkpoint_path = 'models/episodic_dual/checkpoint_28000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'
@@ -159,8 +158,8 @@ if hparams.model_name == 'episodic-transformer':
             arpabet_dict))[None,:].cuda()
         text_lengths = torch.LongTensor([len(text_encoded[0])]).cuda()
 
-        input_dict = {'query': (text_encoded, text_lengths), 
-                'support': x['support']}
+        input_dict = {'query': (text_encoded, text_lengths, ref_idx), 
+                'support': x['support'], 'ref_idx': ref_idx}
         with torch.no_grad():
             mel_outputs, mel_outputs_postnet, gate_outputs, alignments = model.inference(input_dict)
             audio = decode(mel_outputs_postnet)
@@ -183,7 +182,7 @@ if hparams.model_name == 'episodic-transformer':
                 [len(text_encoded[0])]).cuda()
 
         input_dict = {'query': (text_encoded, text_lengths), 
-                'support': x['support']}
+                'support': x['support'], 'ref_idx': ref_idx}
 
         with torch.no_grad():
             mel_outputs, mel_outputs_postnet, gate_outputs, alignments = model.inference(input_dict)

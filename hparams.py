@@ -125,7 +125,7 @@ def create_hparams(hparams_string=None, verbose=False):
         transformer_type = 'dual_baseline',
         sentence_encoder_dim = 128,
 
-        num_common = 8,
+        num_common = 16,
         num_support = 16,
         num_query = 16,
         criterion = 'episodic-loss',  # [episodic-loss, tacotron2-loss]
