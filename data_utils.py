@@ -246,7 +246,14 @@ class EpisodicLoader(TextMelLoader):
         audio_norm = audio_norm.unsqueeze(0)
         melspec = self.stft.mel_spectrogram(audio_norm)
         melspec = torch.squeeze(melspec, 0)
-        return melspec
+
+        f0 = self.get_f0(audio.cpu().numpy(), self.sampling_rate,
+                self.filter_length, self.hop_length, self.f0_min,
+                self.f0_max, self.harm_thresh)
+        f0 = torch.from_numpy(f0)[None]
+        f0 = f0[:, :melspec.size(1)]
+
+        return melspec, f0
 
     def get_text(self, text):
         text_norm = torch.IntTensor(
@@ -257,9 +264,9 @@ class EpisodicLoader(TextMelLoader):
     def __getitem__(self, index):
         audiopath, text, speaker = self.audiopaths_and_text[index]
         text = self.get_text(text)
-        mel = self.get_mel_and_f0(audiopath)
+        mel, f0 = self.get_mel_and_f0(audiopath)
         speaker_id = self.get_speaker_id(speaker)
-        return (text, mel, speaker_id, audiopath)
+        return (text, mel, speaker_id, audiopath, f0)
 
 
 class EpisodicBatchSampler():
@@ -401,6 +408,9 @@ class EpisodicCollater():
         speaker_ids = torch.LongTensor(len(batch))
         datapath = []
 
+        f0_padded = torch.FloatTensor(len(batch), 1, max_target_len)
+        f0_padded.zero_()
+
         for i in range(len(ids_sorted_decreasing)):
             mel = batch[ids_sorted_decreasing[i]][1]
             mel_padded[i, :, :mel.size(1)] = mel
@@ -408,6 +418,9 @@ class EpisodicCollater():
             output_lengths[i] = mel.size(1)
             speaker_ids[i] = batch[ids_sorted_decreasing[i]][2]
             datapath.append(batch[ids_sorted_decreasing[i]][3])
+            
+            f0 = batch[ids_sorted_decreasing[i]][4]
+            f0_padded[i,:,:f0.size(1)] = f0
 
         outputs = {
             'text_padded': text_padded,
@@ -418,6 +431,7 @@ class EpisodicCollater():
             'speaker_ids': speaker_ids,
             'idx': ids_sorted_decreasing,
             'datapath': datapath,
+            'f0_padded': f0_padded,
         }
         
         return outputs

@@ -251,7 +251,7 @@ class Decoder(nn.Module):
             [hparams.prenet_dim, hparams.prenet_dim])
 
         self.attention_rnn = nn.LSTMCell(
-            hparams.prenet_dim + hparams.prenet_f0_dim + self.encoder_embedding_dim,
+            hparams.prenet_dim + hparams.prenet_f0_dim + self.encoder_embedding_dim + hparams.pitch_embedding_dim,
             hparams.attention_rnn_dim)
 
         self.attention_layer = Attention(
@@ -451,15 +451,22 @@ class Decoder(nn.Module):
 #        f0s = f0s.new_zeros(f0s.size())
         f0 = memory.new_zeros(memory.size(0), self.prenet_f0_dim)
         
+        zero_frame = f0s.new_zeros(f0s.size(0),f0s.size(1),1)
+        pitch_embeddings = torch.cat((zero_frame, f0s), dim=-1).permute(2,0,1) # t,bsz,d
+
         self.initialize_decoder_states(
             memory, mask=~get_mask_from_lengths(memory_lengths))
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
             if len(mel_outputs) == 0 or np.random.uniform(0.0, 1.0) <= self.p_teacher_forcing:
-                decoder_input = torch.cat((decoder_inputs[len(mel_outputs)], f0), dim=1)
+                decoder_input = torch.cat(
+                        (decoder_inputs[len(mel_outputs)], pitch_embeddings[len(mel_outputs)], f0),
+                        dim=1)
             else:
-                decoder_input = torch.cat((self.prenet(mel_outputs[-1]), f0), dim=1)
+                decoder_input = torch.cat(
+                        (self.prenet(mel_outputs[-1]), pitch_embeddings[len(mel_outputs)], f0), 
+                        dim=1)
             mel_output, gate_output, attention_weights = self.decode(
                 decoder_input)
             mel_outputs += [mel_output.squeeze(1)]
@@ -759,29 +766,30 @@ class EpisodicTacotronTransformer(Tacotron2):
         print ('episodic tacotron transformer inited')
 
     def parse_batch(self, batch):
-
-        q_text_padded     = to_gpu(batch['query']['text_padded']).long()
-        q_text_length     = to_gpu(batch['query']['input_lengths']).long()
-        q_mel_padded      = to_gpu(batch['query']['mel_padded']).float()
-        q_mel_length      = to_gpu(batch['query']['output_lengths']).long()
-        q_gate_padded     = to_gpu(batch['query']['gate_padded']).float()
-
-        s_text_padded     = to_gpu(batch['support']['text_padded']).long()
-        s_text_length     = to_gpu(batch['support']['input_lengths']).long()
-        s_mel_padded      = to_gpu(batch['support']['mel_padded']).float()
-        s_mel_length      = to_gpu(batch['support']['output_lengths']).long()
-        s_gate_padded     = to_gpu(batch['support']['gate_padded']).float()
-
-        # get style embedding
-        #style_target = self.gst.encoder(q_mel_padded) 
-        #style_target = self.gst.stl(style_target) # bsz,1,token_embedding_size
-        style_target = self.gst.get_style(q_mel_padded)
-
-        y = (q_mel_padded, q_gate_padded, style_target.squeeze(1))
-        x = {
-            'query': (q_text_padded, q_text_length, q_mel_padded, q_mel_length),
-            'support': (s_text_padded, s_text_length, s_mel_padded, s_mel_length),
+        output_dict = {
+            'query': {
+                'text_padded'   : to_gpu(batch['query']['text_padded']).long(),
+                'text_length'   : to_gpu(batch['query']['input_lengths']).long(),
+                'mel_padded'    : to_gpu(batch['query']['mel_padded']).float(),
+                'mel_length'    : to_gpu(batch['query']['output_lengths']).long(),
+                'gate_padded'   : to_gpu(batch['query']['gate_padded']).float(),
+                'f0_padded'     : to_gpu(batch['query']['f0_padded']).float(),
+            },
+            'support': {
+                'text_padded'   : to_gpu(batch['support']['text_padded']).long(),
+                'text_length'   : to_gpu(batch['support']['input_lengths']).long(),
+                'mel_padded'    : to_gpu(batch['support']['mel_padded']).float(),
+                'mel_length'    : to_gpu(batch['support']['output_lengths']).long(),
+                'gate_padded'   : to_gpu(batch['support']['gate_padded']).float(),
+                'f0_pdaded'     : to_gpu(batch['support']['f0_padded']).float(),
+            },
         }
+        
+        y = (output_dict['query']['mel_padded'],
+            output_dict['query']['gate_padded'],
+            None)
+
+        x = output_dict
         return (x, y)
 
     def _dual_baseline_forward(self, inputs):
@@ -789,25 +797,27 @@ class EpisodicTacotronTransformer(Tacotron2):
         support_set = inputs['support']
         query_set = inputs['query']
 
-        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
-        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+        query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
 
-        style_embedding = self.gst(query_text_embedding, None,
-                None, None, support_set[2])
+        style_embedding, pitch_embedding = self.gst(query_text_embedding, None,
+                None, None, support_set['mel_padded'])
         style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
                 (query_text_embedding, style_embedding), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
-                encoder_outputs, query_set[2], memory_lengths=query_set[1].data, f0s=None)
+                encoder_outputs, query_set['mel_padded'], 
+                memory_lengths=query_set['text_length'].data, 
+                f0s=pitch_embedding)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
             style_embedding[:,0,:self.token_embedding_size]],
-                query_set[3].data)
+                query_set['mel_length'].data)
 
         return out
 

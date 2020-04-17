@@ -28,6 +28,7 @@ import torch.nn.init as init
 import torch.nn.functional as F
 import math
 from torch.nn.utils.rnn import PackedSequence
+from layers import ConvNorm
 
 import pdb
 
@@ -166,14 +167,15 @@ class DualTransformerBaseline(nn.Module):
 
         self.gst = GST(hp) # token_embedding_size
         self.num_heads = 1
+        self.pitch_dim = 10
             
         self.pma = PMA(hp.token_embedding_size,
                 num_heads=self.num_heads, num_seeds=1) # single general speaker style
-
         self.pma_post = nn.Linear(hp.token_embedding_size, hp.speaker_embedding_dim)
 
-        self.pre_conv = self.gst.pre_conv # for restore pretrained model
-        self.lstm = self.gst.lstm
+        self.pitch_conv = ConvNorm(hp.n_mel_channels, self.pitch_dim,
+                kernel_size=5,padding=2,stride=1,dilation=1)
+
 
     def get_style(self, rmel):
         return self.gst(rmel)
@@ -187,7 +189,10 @@ class DualTransformerBaseline(nn.Module):
         global_style = self.pma_post(global_style)
 
         style_token = torch.cat((style_embed, global_style), dim=-1)
-        return style_token 
+
+        pitch_embedding = self.pitch_conv(rmel)
+
+        return style_token, pitch_embedding
         
 
 class DualTransformerStyleLayer(nn.Module):
