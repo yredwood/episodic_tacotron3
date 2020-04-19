@@ -167,7 +167,7 @@ class DualTransformerBaseline(nn.Module):
 
         self.gst = GST(hp) # token_embedding_size
         self.num_heads = 1
-        self.pitch_dim = 10
+        self.pitch_dim = hp.pitch_embedding_dim
             
         self.pma = PMA(hp.token_embedding_size,
                 num_heads=self.num_heads, num_seeds=1) # single general speaker style
@@ -191,6 +191,7 @@ class DualTransformerBaseline(nn.Module):
         style_token = torch.cat((style_embed, global_style), dim=-1)
 
         pitch_embedding = self.pitch_conv(rmel)
+        pitch_embedding = F.dropout(pitch_embedding, p=0.5, training=self.training)
 
         return style_token, pitch_embedding
         
