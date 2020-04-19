@@ -833,7 +833,6 @@ class EpisodicTacotronTransformer(Tacotron2):
 #                None, None, support_set[2])
 #        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
 
-
         encoder_outputs = torch.cat(
                 (query_text_embedding, style_embedding), dim=2)
 
