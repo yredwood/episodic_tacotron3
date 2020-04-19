@@ -11,4 +11,3 @@ pillow
 nltk==3.4.5
 jamo==0.4.1
 music21
--r other_libs/requirements.txt

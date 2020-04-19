@@ -499,6 +499,8 @@ class Decoder(nn.Module):
 #        f0s = f0s.permute(2, 0, 1)
 #        f0s = f0s.new_zeros(f0s.size())
         f0 = memory.new_zeros(memory.size(0), self.prenet_f0_dim)
+        zero_frame = f0s.new_zeros(f0s.size(0),f0s.size(1),1)
+        pitch_embeddings = torch.cat((zero_frame, f0s), dim=-1).permute(2,0,1)
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while True:
@@ -507,7 +509,9 @@ class Decoder(nn.Module):
 #            else:
 #                f0 = f0s[-1] * 0
 
-            decoder_input = torch.cat((self.prenet(decoder_input), f0), dim=1)
+            decoder_input = torch.cat(
+                    (self.prenet(decoder_input), pitch_embeddings[len(mel_outputs)], f0), 
+                    dim=1)
             mel_output, gate_output, alignment = self.decode(decoder_input)
 
             mel_outputs += [mel_output.squeeze(1)]
@@ -781,7 +785,7 @@ class EpisodicTacotronTransformer(Tacotron2):
                 'mel_padded'    : to_gpu(batch['support']['mel_padded']).float(),
                 'mel_length'    : to_gpu(batch['support']['output_lengths']).long(),
                 'gate_padded'   : to_gpu(batch['support']['gate_padded']).float(),
-                'f0_pdaded'     : to_gpu(batch['support']['f0_padded']).float(),
+                'f0_padded'     : to_gpu(batch['support']['f0_padded']).float(),
             },
         }
         
@@ -827,39 +831,23 @@ class EpisodicTacotronTransformer(Tacotron2):
         query_set = inputs['query']
         ref_idx = inputs['ref_idx']
 
-        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
-        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+        query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
 
-
-        style_all = self.gst.get_style(support_set[2])
-        style_single = self.gst.get_style(support_set[2][ref_idx:ref_idx+1])
-        #style_single = style_all[ref_idx:ref_idx+1]
-        global_style = self.gst.pma(style_all.transpose(0,1))
-        global_style = self.gst.pma_post(global_style)
-        
-        style_embedding = torch.cat((style_single, global_style), dim=-1).repeat(1,query_text_embedding.size(1),1)
-
-#        style_embedding = self.gst(support_set[0], None,
-#                None, None, support_set[2])
-#        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
-
+        style_embedding, pitch_embedding = self.gst(support_set['mel_padded'], None,
+                None, None, support_set['mel_padded'])
+        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+        style_embedding = style_embedding[ref_idx:ref_idx+1]
+        pitch_embedding = pitch_embedding[ref_idx:ref_idx+1]
 
         encoder_outputs = torch.cat(
                 (query_text_embedding, style_embedding), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder.inference(
-                encoder_outputs, None)
-#
-#        mel_outputs, gate_outputs, alignments = self.decoder(
-#                encoder_outputs, support_set[2], memory_lengths=support_set[1].data, f0s=None)
+                encoder_outputs, f0s=pitch_embedding)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
-
-#        mel_outputs = mel_outputs[ref_idx:ref_idx+1]
-#        mel_outputs_postnet = mel_outputs_postnet[ref_idx:ref_idx+1]
-#        gate_outputs = gate_outputs[ref_idx:ref_idx+1]
-#        alignments = alignments[ref_idx:ref_idx+1]
 
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
 

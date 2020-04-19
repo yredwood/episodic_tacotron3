@@ -25,7 +25,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/episodic_dual/checkpoint_24000'
+checkpoint_path = 'models/pitch_embedding/checkpoint_12000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'
@@ -142,7 +142,7 @@ if hparams.model_name == 'episodic-transformer':
 
         # 1. save original mel spec
         fname_wav = os.path.join(output_dir, 'ref_true_{}.wav'.format(i))
-        mel_outputs_postnet = x['support'][2][ref_idx:ref_idx+1]
+        mel_outputs_postnet = x['support']['mel_padded'][ref_idx:ref_idx+1]
         # remove pad
         mel_len = (mel_outputs_postnet.mean(1) != 0).sum()
         mel_outputs_postnet = mel_outputs_postnet[:,:,:mel_len]
@@ -158,8 +158,15 @@ if hparams.model_name == 'episodic-transformer':
             arpabet_dict))[None,:].cuda()
         text_lengths = torch.LongTensor([len(text_encoded[0])]).cuda()
 
-        input_dict = {'query': (text_encoded, text_lengths, ref_idx), 
-                'support': x['support'], 'ref_idx': ref_idx}
+        input_dict = {
+                'query': {
+                    'text_padded': text_encoded,
+                    'text_length': text_lengths,
+                },
+                'support': x['support'],
+                'ref_idx': ref_idx,
+        }
+                    
         with torch.no_grad():
             mel_outputs, mel_outputs_postnet, gate_outputs, alignments = model.inference(input_dict)
             audio = decode(mel_outputs_postnet)
@@ -181,8 +188,14 @@ if hparams.model_name == 'episodic-transformer':
         text_lengths = torch.LongTensor(
                 [len(text_encoded[0])]).cuda()
 
-        input_dict = {'query': (text_encoded, text_lengths), 
-                'support': x['support'], 'ref_idx': ref_idx}
+        input_dict = {
+                'query': {
+                    'text_padded': text_encoded,
+                    'text_length': text_lengths,
+                },
+                'support': x['support'],
+                'ref_idx': ref_idx,
+        }
 
         with torch.no_grad():
             mel_outputs, mel_outputs_postnet, gate_outputs, alignments = model.inference(input_dict)
