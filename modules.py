@@ -191,7 +191,7 @@ class DualTransformerBaseline(nn.Module):
         style_token = torch.cat((style_embed, global_style), dim=-1)
 
         pitch_embedding = self.pitch_conv(rmel)
-        pitch_embedding = F.dropout(pitch_embedding, p=0.5, training=self.training)
+        #pitch_embedding = F.dropout(pitch_embedding, p=0.5, training=self.training)
 
         return style_token, pitch_embedding
         

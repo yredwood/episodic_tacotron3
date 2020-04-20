@@ -508,9 +508,14 @@ class Decoder(nn.Module):
 #                f0 = f0s[len(mel_outputs)]
 #            else:
 #                f0 = f0s[-1] * 0
+            
+            if len(mel_outputs) < len(pitch_embeddings):
+                pe = pitch_embeddings[len(mel_outputs)]
+            else:
+                pe = pitch_embeddings[-1] * 0
 
             decoder_input = torch.cat(
-                    (self.prenet(decoder_input), pitch_embeddings[len(mel_outputs)], f0), 
+                    (self.prenet(decoder_input), pe, f0), 
                     dim=1)
             mel_output, gate_output, alignment = self.decode(decoder_input)
 
