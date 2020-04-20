@@ -195,24 +195,26 @@ class DualTransformerStyleLayer(nn.Module):
         super().__init__()
 
         self.gst = GST(hp)
+        self.num_heads = 1
+            
+        self.pma = PMA(hp.token_embedding_size,
+                num_heads=self.num_heads, num_seeds=1) # single general speaker style
+
+        self.pma_post = nn.Linear(hp.token_embedding_size, hp.speaker_embedding_dim)
+
         self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
                 hidden_size=hp.sentence_encoder_dim, batch_first=True)
         
-        self.num_heads = 1
-        self.mab = MAB_qkv(hp.sentence_encoder_dim,
-                hp.sentence_encoder_dim,
-                hp.token_embedding_size + hp.speaker_embedding_dim,
-                hp.token_embedding_size + hp.speaker_embedding_dim, num_heads=self.num_heads) # sentence specific style
-            
-        self.pma = PMA(hp.token_embedding_size + hp.speaker_embedding_dim,
-                num_heads=self.num_heads, num_seeds=1) # single general speaker style
+        self.mab = MAB_qkv(hp.sentence_encoder_dim, #query
+                hp.sentence_encoder_dim, #key
+                hp.token_embedding_size, #value
+                hp.token_embedding_size, num_heads=self.num_heads) # sentence specific style
 
         self.pre_conv = self.gst.pre_conv # for restore pretrained model
         self.lstm = self.gst.lstm
 
     def get_style(self, rmel):
-        style_embed = self.gst(rmel)
-        return style_embed
+        return self.gst(rmel)
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         # get text specific style token
@@ -228,9 +230,9 @@ class DualTransformerStyleLayer(nn.Module):
         _rtp = nn.utils.rnn.pack_padded_sequence(rtext, rtext_len, batch_first=True)
         _, key = self.sentence_encoder(_rtp) # 1, bsz_s, encoder_embedding_dim
 
-        text_specific_style, attn = self.mab(query.transpose(0,1), key.repeat(query.size(1),1,1),
+        z0, attn = self.mab(query.transpose(0,1), key.repeat(query.size(1),1,1),
                 style_embed, get_attn=True)
-        text_specific_style = F.dropout(text_specific_style, p=0.5, training=self.training)
+        #text_specific_style = F.dropout(text_specific_style, p=0.5, training=self.training)
 
         entropy = torch.log(attn).mean()
         print ('NENT: {:.4f} | TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(),
@@ -238,11 +240,11 @@ class DualTransformerStyleLayer(nn.Module):
         print (attn.argmax(-1).squeeze().data.cpu().numpy())
 
         #qkv = _style_embed.transpose(0,1) # 1,bsz_s,dim
-        general_style = self.pma(_style_embed.transpose(0,1)) # 1,1,dim
+        global_style = self.pma(_style_embed.transpose(0,1)) # 1,1,dim
+        z1 = self.pma_post(global_style).repeat(text.size(0),1,1)
 
-        style_embed = torch.tanh(text_specific_style) + torch.tanh(general_style)
-        return style_embed
-
+        #style_token = torch.cat((text_specific_style, global_style), dim=-1)
+        return z0, z1
 
 
 class TransformerStyleTokenLayer(nn.Module):

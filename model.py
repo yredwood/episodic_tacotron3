@@ -820,7 +820,6 @@ class EpisodicTacotronTransformer(Tacotron2):
         query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
         query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
 
-
         style_all = self.gst.get_style(support_set[2])
         style_single = self.gst.get_style(support_set[2][ref_idx:ref_idx+1])
         #style_single = style_all[ref_idx:ref_idx+1]
@@ -867,13 +866,14 @@ class EpisodicTacotronTransformer(Tacotron2):
         support_text_embedding = self.encoder(support_text_embedding, support_set[1].data)
         # bsz_s, t_s, token_dim
 
-        style_embedding = self.gst(query_text_embedding, query_set[1],
+        z0, z1 = self.gst(query_text_embedding, query_set[1],
                 support_text_embedding, support_set[1],
                 support_set[2])
-        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+        z0 = z0.repeat(1,query_text_embedding.size(1),1)
+        z1 = z1.repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
-                (query_text_embedding, style_embedding), dim=2)
+                (query_text_embedding, z0, z1), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
                 encoder_outputs, query_set[2], memory_lengths=query_set[1].data, f0s=None)
@@ -881,8 +881,7 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
-        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
-            style_embedding[:,0]],
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, z0[:,0]],
                 query_set[3].data)
                 
         return out
@@ -899,13 +898,14 @@ class EpisodicTacotronTransformer(Tacotron2):
         support_text_embedding = self.encoder(support_text_embedding, support_set[1].data)
         # bsz_s, t_s, token_dim
 
-        style_embedding = self.gst(query_text_embedding, query_set[1],
+        z0, z1 = self.gst(query_text_embedding, query_set[1],
                 support_text_embedding, support_set[1],
                 support_set[2])
-        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+        z0 = z0.repeat(1,query_text_embedding.size(1),1)
+        z1 = z1.repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
-                (query_text_embedding, style_embedding), dim=2)
+                (query_text_embedding, z0, z1), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder.inference(
                 encoder_outputs, None)
