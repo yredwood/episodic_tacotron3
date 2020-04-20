@@ -188,12 +188,13 @@ class DualTransformerBaseline(nn.Module):
         global_style = self.pma(style_embed.transpose(0,1)).repeat(text.size(0),1,1)
         global_style = self.pma_post(global_style)
 
-        style_token = torch.cat((style_embed, global_style), dim=-1)
+        #style_token = torch.cat((style_embed, global_style), dim=-1)
 
         pitch_embedding = self.pitch_conv(rmel)
         #pitch_embedding = F.dropout(pitch_embedding, p=0.5, training=self.training)
+        
+        return style_embed, global_style, pitch_embedding
 
-        return style_token, pitch_embedding
         
 
 class DualTransformerStyleLayer(nn.Module):
