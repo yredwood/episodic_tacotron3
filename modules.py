@@ -172,13 +172,37 @@ class DualTransformerBaseline(nn.Module):
         self.pma = PMA(hp.token_embedding_size,
                 num_heads=self.num_heads, num_seeds=1) # single general speaker style
         self.pma_post = nn.Linear(hp.token_embedding_size, hp.speaker_embedding_dim)
-
-        self.pitch_conv = ConvNorm(hp.n_mel_channels, self.pitch_dim,
+        
+        pitch_internal_dim = 64
+        self.pitch_conv = ConvNorm(hp.n_mel_channels, pitch_internal_dim,
                 kernel_size=5,padding=2,stride=1,dilation=1)
+        self.pitch_dropout_c = torch.nn.Parameter(torch.ones(1,1,1),
+                requires_grad=False)
+        self.pitch_rnn = nn.GRU(input_size=pitch_internal_dim,
+                hidden_size=pitch_internal_dim, batch_first=True)
+        self.pitch_rnn_postnet = nn.Linear(pitch_internal_dim, self.pitch_dim)
 
 
     def get_style(self, rmel):
         return self.gst(rmel)
+
+    def calc_length(self, x):
+        x_len = [x.size(-1) for _ in range(x.size(0))]
+        for t in reversed(range(x.size(-1))):
+            pads = (x[:,:,t].sum(1) == 0).int().tolist()
+            x_len = [x_len[i] - pads[i] for i in range(len(x_len))]
+
+            if sum(pads) == 0:
+                break
+        return x_len
+
+    def pitch_rnn_forward(self, x, xlen):
+        x = x.transpose(-1,-2)
+        packed = nn.utils.rnn.pack_padded_sequence(x, xlen, batch_first=True, enforce_sorted=False)
+        output, hidden = self.pitch_rnn(packed)
+        unpacked, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True, padding_value=.0)
+        out = F.relu(self.pitch_rnn_postnet(unpacked))
+        return out.transpose(-1,-2)
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         # rmel == same as query set
@@ -192,6 +216,9 @@ class DualTransformerBaseline(nn.Module):
 
         pitch_embedding = self.pitch_conv(rmel)
         #pitch_embedding = F.dropout(pitch_embedding, p=0.5, training=self.training)
+        pitch_embedding = self.pitch_rnn_forward(pitch_embedding, self.calc_length(rmel))
+        pitch_embedding = F.dropout(self.pitch_dropout_c.repeat(pitch_embedding.size(0),1,1), 
+                p=0.5, training=self.training) * pitch_embedding
         
         return style_embed, global_style, pitch_embedding
 

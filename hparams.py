@@ -124,7 +124,7 @@ def create_hparams(hparams_string=None, verbose=False):
         model_name = 'episodic-transformer', # [gst-tacotron, episodic-transformer, episodic-baseline]
         transformer_type = 'dual_baseline',
         sentence_encoder_dim = 128,
-        pitch_embedding_dim = 1,
+        pitch_embedding_dim = 4,
 
         num_common = 16,
         num_support = 16,

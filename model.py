@@ -844,6 +844,7 @@ class EpisodicTacotronTransformer(Tacotron2):
                 None, None, support_set['mel_padded'])
         z0 = z0[ref_idx:ref_idx+1].repeat(1,query_text_embedding.size(1),1)
         z1 = z1[ref_idx:ref_idx+1].repeat(1,query_text_embedding.size(1),1)
+        pitch = pitch[ref_idx:ref_idx+1]
 
         encoder_outputs = torch.cat(
                 (query_text_embedding, z0, z1), dim=2)
