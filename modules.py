@@ -195,18 +195,19 @@ class DualTransformerStyleLayer(nn.Module):
         super().__init__()
 
         self.gst = GST(hp)
-        self.num_heads = 8
+        self.num_heads = 1
             
         self.pma = PMA(hp.token_embedding_size,
                 num_heads=self.num_heads, num_seeds=1) # single general speaker style
 
         self.pma_post = nn.Linear(hp.token_embedding_size, hp.speaker_embedding_dim)
-
-        self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
-                hidden_size=hp.sentence_encoder_dim, batch_first=True)
         
-        self.mab = MAB_qkv(hp.sentence_encoder_dim, #query
-                hp.sentence_encoder_dim, #key
+        self.pre_text_encoder = nn.Linear(hp.encoder_embedding_dim, hp.sentence_encoder_dim)
+        self.sentence_encoder = nn.GRU(input_size=hp.sentence_encoder_dim,
+                hidden_size=hp.sentence_encoder_dim, batch_first=True)
+
+        self.mab = MAB_qkv(hp.sentence_encoder_dim * 2, #query
+                hp.sentence_encoder_dim * 2, #key
                 hp.token_embedding_size, #value
                 hp.token_embedding_size, num_heads=self.num_heads) # sentence specific style
 
@@ -216,34 +217,34 @@ class DualTransformerStyleLayer(nn.Module):
     def get_style(self, rmel):
         return self.gst(rmel)
 
-    def forward(self, text, text_len, rtext, rtext_len, rmel):
-        # get text specific style token
-        _style_embed = self.get_style(rmel) # bsz_s, 1, dim
-        style_embed = _style_embed.transpose(0,1).repeat(text.size(0),1,1) # bsz, bsz_s, dim
+    def sentence_forward(self, text, text_len):
+        text = self.pre_text_encoder(text)
 
         self.sentence_encoder.flatten_parameters()
         text_len = text_len.cpu().numpy()
-        _tp = nn.utils.rnn.pack_padded_sequence(text, text_len, batch_first=True)
-        _, query = self.sentence_encoder(_tp) # 1, bsz, encoder_embedding_dim
+        packed = nn.utils.rnn.pack_padded_sequence(text, text_len, batch_first=True)
+        _, lstm_sentence_embedding = self.sentence_encoder(packed)
+        #return lstm_sentence_embedding
 
-        rtext_len = rtext_len.cpu().numpy()
-        _rtp = nn.utils.rnn.pack_padded_sequence(rtext, rtext_len, batch_first=True)
-        _, key = self.sentence_encoder(_rtp) # 1, bsz_s, encoder_embedding_dim
+        bow_vec = torch.mean(text, 1, keepdim=True).transpose(0,1)
+        output = torch.cat((lstm_sentence_embedding, bow_vec), dim=-1)
+        return output
 
-        z0, attn = self.mab(query.transpose(0,1), key.repeat(query.size(1),1,1),
-                style_embed, get_attn=True)
-        #text_specific_style = F.dropout(text_specific_style, p=0.5, training=self.training)
+    def forward(self, text, text_len, rtext, rtext_len, rmel):
+        style_embed = self.get_style(rmel) # bsz_s, 1, dim
 
+        style_value = style_embed.transpose(0,1).repeat(text.size(0),1,1) # bsz, bsz_s, dim
+        sentence_query = self.sentence_forward(text, text_len).transpose(0,1) # bsz, 1, dim
+        sentence_key = self.sentence_forward(rtext, rtext_len).repeat(text.size(0),1,1) # bsz, bsz_s, dim
+
+        z0, attn = self.mab(sentence_query, sentence_key, style_value, get_attn=True) # text-specific style
+        z1 = self.pma(style_embed.transpose(0,1))
+        z1 = self.pma_post(z1).repeat(text.size(0),1,1)
+
+        attn = attn.reshape(text.size(0),-1,attn.size(-1)).mean(1)
         entropy = torch.log(attn).mean()
-        print ('NENT: {:.4f} | TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(),
-            self.mab.T.item()))
-        #print (attn.argmax(-1).squeeze().data.cpu().numpy())
+        print ('N-ENT: {:.4f}  |  TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(), self.mab.T.item()))
 
-        #qkv = _style_embed.transpose(0,1) # 1,bsz_s,dim
-        global_style = self.pma(_style_embed.transpose(0,1)) # 1,1,dim
-        z1 = self.pma_post(global_style).repeat(text.size(0),1,1)
-
-        #style_token = torch.cat((text_specific_style, global_style), dim=-1)
         return z0, z1
 
 
