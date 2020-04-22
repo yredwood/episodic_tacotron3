@@ -165,7 +165,7 @@ class DualTransformerBaseline(nn.Module):
         super().__init__()
 
         self.gst = GST(hp) # token_embedding_size
-        self.num_heads = 1
+        self.num_heads = 8
             
         self.pma = PMA(hp.token_embedding_size,
                 num_heads=self.num_heads, num_seeds=1) # single general speaker style
@@ -180,14 +180,14 @@ class DualTransformerBaseline(nn.Module):
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         # rmel == same as query set
-        style_embed = self.get_style(rmel) # bsz, 1, dim
+        z0 = self.get_style(rmel) # bsz, 1, dim
         
         # global style
-        global_style = self.pma(style_embed.transpose(0,1)).repeat(text.size(0),1,1)
-        global_style = self.pma_post(global_style)
+        z1 = self.pma(z0.transpose(0,1)).repeat(text.size(0),1,1)
+        z1 = self.pma_post(z1)
 
-        style_token = torch.cat((style_embed, global_style), dim=-1)
-        return style_token 
+        #style_token = torch.cat((style_embed, global_style), dim=-1)
+        return z0, z1
         
 
 class DualTransformerStyleLayer(nn.Module):
@@ -198,7 +198,7 @@ class DualTransformerStyleLayer(nn.Module):
         self.sentence_encoder = nn.GRU(input_size=hp.encoder_embedding_dim,
                 hidden_size=hp.sentence_encoder_dim, batch_first=True)
         
-        self.num_heads = 1
+        self.num_heads = 8
         self.mab = MAB_qkv(hp.sentence_encoder_dim,
                 hp.sentence_encoder_dim,
                 hp.token_embedding_size + hp.speaker_embedding_dim,
@@ -297,7 +297,7 @@ class TransformerStyleTokenLayer(nn.Module):
         # bsz, 1, token_embedding_size
         return style
 
-class MAB_qkv(nn.Module):
+class _MAB_qkv(nn.Module):
     def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=8, ln=False, p=None):
         super().__init__()
         self.num_heads = num_heads
@@ -335,7 +335,7 @@ class PMA(nn.Module):
         return out
 
 
-class _MAB_qkv(nn.Module):
+class MAB_qkv(nn.Module):
     def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=8, ln=False, p=None):
         super().__init__()
         self.num_heads = num_heads
@@ -344,10 +344,13 @@ class _MAB_qkv(nn.Module):
         self.fc_v = nn.Linear(dim_v, dim)
         self.fc_o = nn.Linear(dim, dim, bias=True)
 
-        self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
-        self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()
-        self.dropout1 = nn.Dropout(p=p) if p is not None else nn.Identity()
-        self.dropout2 = nn.Dropout(p=p) if p is not None else nn.Identity()
+        self.T = nn.Parameter(torch.Tensor(1))
+        nn.init.constant(self.T, 10.0)
+
+#        self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
+#        self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()
+#        self.dropout1 = nn.Dropout(p=p) if p is not None else nn.Identity()
+#        self.dropout2 = nn.Dropout(p=p) if p is not None else nn.Identity()
 
 
     def forward(self, query, key, value, mask=None, get_attn=False):
@@ -356,7 +359,7 @@ class _MAB_qkv(nn.Module):
         K_ = torch.cat(K.chunk(self.num_heads, -1), 0)
         V_ = torch.cat(V.chunk(self.num_heads, -1), 0)
 
-        A_logits = (Q_ @ K_.transpose(-2, -1)) /  math.sqrt(Q.shape[-1]) * 1.
+        A_logits = (Q_ @ K_.transpose(-2, -1)) /  math.sqrt(Q.shape[-1]) * self.T
         if mask is not None:
             mask = torch.stack([mask]*Q.shape[-2], -2)
             mask = torch.cat([mask]*self.num_heads, 0)

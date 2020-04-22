@@ -561,6 +561,23 @@ class Decoder(nn.Module):
         return mel_outputs, gate_outputs, alignments
 
 
+class MINE(nn.Module):
+    def __init__(self, hparams):
+        super().__init__()
+        self.z0_dim = 256
+        self.z1_dim = 128
+        self.mine = nn.Linear(self.z0_dim + self.z1_dim, 1)
+
+    def forward(self, z0, z1):
+        # z1: (bsz, dim)
+        # -> et, t
+        rand_idx = torch.randperm(z1.size(0))
+        z1_bar = z1[rand_idx]
+
+        t = self.mine(torch.cat((z0,z1), dim=-1))
+        et = self.mine(torch.cat((z0,z1_bar), dim=-1))
+        return t, torch.exp(et)
+                
 class Tacotron2(nn.Module):
     def __init__(self, hparams):
         super(Tacotron2, self).__init__()
@@ -739,6 +756,7 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.encoder = Encoder(hparams)
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams)
+        self.mine = MINE(hparams)
         if hparams.transformer_type == 'single':
             self.gst = TransformerStyleTokenLayer(hparams)
             self.forward = self._forward
@@ -757,6 +775,7 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.speaker_embedding_dim = hparams.speaker_embedding_dim
         self.token_embedding_size = hparams.token_embedding_size
         print ('episodic tacotron transformer inited')
+
 
     def parse_batch(self, batch):
 
@@ -792,12 +811,14 @@ class EpisodicTacotronTransformer(Tacotron2):
         query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
         query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
 
-        style_embedding = self.gst(query_text_embedding, None,
+        z0, z1 = self.gst(query_text_embedding, None,
                 None, None, support_set[2])
-        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+        t, et = self.mine(z0.squeeze(1), z1.squeeze(1))
+        z0 = z0.repeat(1,query_text_embedding.size(1),1)
+        z1 = z1.repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
-                (query_text_embedding, style_embedding), dim=2)
+                (query_text_embedding, z0, z1), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
                 encoder_outputs, query_set[2], memory_lengths=query_set[1].data, f0s=None)
@@ -805,9 +826,8 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
-        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
-            style_embedding[:,0,:self.token_embedding_size]],
-                query_set[3].data)
+        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments,
+            (t, et)], query_set[3].data)
 
         return out
 
@@ -885,7 +905,7 @@ class EpisodicTacotronTransformer(Tacotron2):
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
             style_embedding[:,0]],
                 query_set[3].data)
-                
+        
         return out
 
     def _inference(self, inputs):
