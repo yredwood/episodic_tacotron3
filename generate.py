@@ -25,7 +25,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/episodic_transformer/checkpoint_1000'
+checkpoint_path = 'models/transformer_again2424_lr1e03_aneal2000/checkpoint_2500'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'
@@ -169,7 +169,7 @@ if hparams.model_name == 'episodic-transformer':
         save_figure(mel_outputs_postnet[0].data.cpu().numpy(),
                 alignments[0].data.cpu().numpy(), fname_wav.replace('.wav', '.png'), 
                 description=test_text)
-        print (test_text)
+        print (test_text, ref_idx)
 
     # save test texts 
     for tidx, test_text in enumerate(test_text_list):

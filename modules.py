@@ -244,6 +244,7 @@ class DualTransformerStyleLayer(nn.Module):
         attn = attn.reshape(text.size(0),-1,attn.size(-1)).mean(1)
         entropy = torch.log(attn).mean()
         print ('N-ENT: {:.4f}  |  TEMP: {:.4f}'.format(-entropy.data.cpu().numpy(), self.mab.T.item()))
+        print (attn.argmax(-1).squeeze().data.cpu().numpy())
 
         return z0, z1
 
@@ -309,7 +310,7 @@ class _MAB_qkv(nn.Module):
         self.fc_v = nn.Linear(dim_v, dim)
         self.fc_o = nn.Linear(dim, dim)
         self.T = nn.Parameter(torch.Tensor(1))
-        nn.init.constant_(self.T, 1.)
+        nn.init.constant_(self.T, 5.)
 
     def forward(self, query, key, value, get_attn=False):
         Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)
@@ -347,7 +348,7 @@ class MAB_qkv(nn.Module):
         self.fc_v = nn.Linear(dim_v, dim)
         self.fc_o = nn.Linear(dim, dim, bias=True)
         self.T = nn.Parameter(torch.Tensor(1))
-        nn.init.constant_(self.T, 1.)
+        nn.init.constant_(self.T, 10.)
 
 #        self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
 #        self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()
