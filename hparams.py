@@ -16,7 +16,7 @@ def create_hparams(hparams_string=None, verbose=False):
         fp16_run=False,
         distributed_run=False,
         dist_backend="nccl",
-        dist_url="tcp://localhost:54325",
+        dist_url="tcp://localhost:54327",
         cudnn_enabled=True,
         cudnn_benchmark=False,
         ignore_layers=['speaker_embedding.weight'],
@@ -124,7 +124,7 @@ def create_hparams(hparams_string=None, verbose=False):
         model_name = 'episodic-transformer', # [gst-tacotron, episodic-transformer, episodic-baseline]
         transformer_type = 'dual_baseline',
         sentence_encoder_dim = 128,
-        pitch_embedding_dim = 4,
+        pitch_embedding_dim = 10,
 
         num_common = 16,
         num_support = 16,
