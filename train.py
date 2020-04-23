@@ -17,13 +17,13 @@ from loss_function import Tacotron2Loss, EpisodicLoss
 from logger import Tacotron2Logger
 from hparams import create_hparams
 
+import pdb
 
 def reduce_tensor(tensor, n_gpus):
     rt = tensor.clone()
     dist.all_reduce(rt, op=dist.ReduceOp.SUM)
     rt /= n_gpus
     return rt
-
 
 def init_distributed(hparams, n_gpus, rank, group_name):
     assert torch.cuda.is_available(), "Distributed mode requires CUDA."
@@ -264,6 +264,8 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
         print("Epoch: {}".format(epoch))
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)
+
+        meta_losses = []
         for i, batch in enumerate(train_loader):
             start = time.perf_counter()
             if iteration > 0 and iteration % hparams.learning_rate_anneal == 0:
@@ -275,10 +277,17 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             model.zero_grad()
             x, y = model.parse_batch(batch)
             y_pred = model(x)
-
             loss = criterion(y_pred, y)
+
+            meta_losses.append(loss)
+            if len(meta_losses) < hparams.meta_batch_size:
+                continue
+            else:
+                loss = torch.mean(torch.stack(meta_losses))
+                meta_losses = []
+
             if hparams.distributed_run:
-                reduced_loss = reduce_tensor(loss.data, n_gpus).item()
+                reduced_loss = reduce_tensor(loss.data, n_gpus)
             else:
                 reduced_loss = loss.item()
 

@@ -38,9 +38,9 @@ class EpisodicLoss(nn.Module):
                 nn.MSELoss()(mel_out_postnet, mel_target)
         gate_loss = nn.BCEWithLogitsLoss()(gate_out, gate_target)
         
-        t, et = t_et
-        self.ma_et = (1-self.ma_rate)*self.ma_et + self.ma_rate*torch.mean(et)
-        mi_loss = -(torch.mean(t) - (1/self.ma_et.mean()).detach()*torch.mean(et))
+        #t, et = t_et
+        #self.ma_et = (1-self.ma_rate)*self.ma_et + self.ma_rate*torch.mean(et)
+        #mi_loss = -(torch.mean(t) - (1/self.ma_et.mean()).detach()*torch.mean(et))
 
         #style_loss = nn.MSELoss()(style_embedding, style_target)
-        return mel_loss + gate_loss + mi_loss
+        return mel_loss + gate_loss #+ mi_loss

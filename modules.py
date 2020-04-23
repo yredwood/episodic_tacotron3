@@ -345,7 +345,7 @@ class MAB_qkv(nn.Module):
         self.fc_o = nn.Linear(dim, dim, bias=True)
 
         self.T = nn.Parameter(torch.Tensor(1))
-        nn.init.constant(self.T, 10.0)
+        nn.init.constant_(self.T, 10.0)
 
 #        self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
 #        self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()

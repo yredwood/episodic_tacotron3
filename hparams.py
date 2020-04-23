@@ -16,7 +16,7 @@ def create_hparams(hparams_string=None, verbose=False):
         fp16_run=False,
         distributed_run=False,
         dist_backend="nccl",
-        dist_url="tcp://localhost:54326",
+        dist_url="tcp://localhost:54321",
         cudnn_enabled=True,
         cudnn_benchmark=False,
         ignore_layers=['speaker_embedding.weight'],
@@ -129,6 +129,7 @@ def create_hparams(hparams_string=None, verbose=False):
         num_support = 16,
         num_query = 16,
         criterion = 'episodic-loss',  # [episodic-loss, tacotron2-loss]
+        meta_batch_size = 2,
 
     )
 
