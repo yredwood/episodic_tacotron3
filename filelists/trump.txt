@@ -1,0 +1,4 @@
+data-bin/trump/01.wav|We're sending direct payment to millions of American workers, more than eighty million Americans have already received their payment
+data-bin/trump/02.wav|Over the last three years we built the strongest economy and the most successful country the world has ever seen
+data-bin/trump/03.wav|But at the same time they're approving things at record numbers in a record and a record grade.
+data-bin/trump/04.wav|Things are happening just like this event things are happending very rapidly and I'd like to have Stephen tell you a little bit about it.

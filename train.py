@@ -25,6 +25,11 @@ def reduce_tensor(tensor, n_gpus):
     rt /= n_gpus
     return rt
 
+def gather_tensor(tensor, tensor_list):
+    rt = tensor.clone()
+    dist.all_gather(tensor_list, rt)
+    return torch.cat(tensor_list, dim=0)
+
 def init_distributed(hparams, n_gpus, rank, group_name):
     assert torch.cuda.is_available(), "Distributed mode requires CUDA."
     print("Initializing Distributed")
@@ -179,7 +184,6 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
 def validate(model, criterion, val_loader, iteration, batch_size, n_gpus,
              logger, distributed_run, rank):
     """Handles all the validation scoring and printing"""
-    return
     model.eval()
     with torch.no_grad():
         val_loss = 0.0
@@ -265,7 +269,6 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)
 
-        meta_losses = []
         for i, batch in enumerate(train_loader):
             start = time.perf_counter()
             if iteration > 0 and iteration % hparams.learning_rate_anneal == 0:
@@ -277,14 +280,16 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             model.zero_grad()
             x, y = model.parse_batch(batch)
             y_pred = model(x)
-            loss = criterion(y_pred, y)
+            
+            z0, z1 = model.get_zs_from_pred(y_pred)
+            z0_list = [z0.new_ones(z0.size()) for _ in range(n_gpus)]
+            z1_list = [z1.new_ones(z1.size()) for _ in range(n_gpus)]
 
-            meta_losses.append(loss)
-            if len(meta_losses) < hparams.meta_batch_size:
-                continue
-            else:
-                loss = torch.mean(torch.stack(meta_losses))
-                meta_losses = []
+            z0_list = gather_tensor(z0, z0_list)
+            z1_list = gather_tensor(z1, z1_list)
+
+            loss = criterion(y_pred, y)
+            loss += model.mi_loss(z0_list, z1_list)
 
             if hparams.distributed_run:
                 reduced_loss = reduce_tensor(loss.data, n_gpus)

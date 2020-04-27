@@ -776,6 +776,9 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.token_embedding_size = hparams.token_embedding_size
         print ('episodic tacotron transformer inited')
 
+        self.ma_et = 1.0
+        self.ma_rate = 0.95
+
 
     def parse_batch(self, batch):
 
@@ -813,12 +816,12 @@ class EpisodicTacotronTransformer(Tacotron2):
 
         z0, z1 = self.gst(query_text_embedding, None,
                 None, None, support_set[2])
-        t, et = self.mine(z0.squeeze(1), z1.squeeze(1))
-        z0 = z0.repeat(1,query_text_embedding.size(1),1)
-        z1 = z1.repeat(1,query_text_embedding.size(1),1)
+        #t, et = self.mine(z0.squeeze(1), z1.squeeze(1))
+        _z0 = z0.repeat(1,query_text_embedding.size(1),1)
+        _z1 = z1.repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
-                (query_text_embedding, z0, z1), dim=2)
+                (query_text_embedding, _z0, _z1), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
                 encoder_outputs, query_set[2], memory_lengths=query_set[1].data, f0s=None)
@@ -827,9 +830,20 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments,
-            (t, et)], query_set[3].data)
+            (z0, z1)], query_set[3].data)
 
         return out
+
+    def get_zs_from_pred(self, pred):
+        z0,z1 = pred[-1]
+        return z0.squeeze(1),z1.squeeze(1)
+
+    def mi_loss(self, z0, z1):
+        t, et = self.mine(z0, z1)
+        self.ma_et = (1-self.ma_rate)*self.ma_et + self.ma_rate*torch.mean(et)
+        mi_loss = -(torch.mean(t) - (1/self.ma_et.mean()).detach()*torch.mean(et))
+        return mi_loss
+
 
     def _dual_baseline_inference(self, inputs):
         # only use query set
