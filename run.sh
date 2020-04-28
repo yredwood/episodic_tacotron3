@@ -10,9 +10,9 @@ cmd2=$2
 #    -c models/pretrained/mellotron_libritts.pt --warm_start \
 #    --output_directory=models/$name --log_directory=logs/$name 
 
-name=transformer_again2424_lr1e03_aneal2000
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m multiproc train.py --hparams=distributed_run=True \
-    -c models/episodic_dual/checkpoint_70000 --warm_start \
+name=test33
+CUDA_VISIBLE_DEVICES=4,5,6,7 python -m multiproc train.py --hparams=distributed_run=True \
+    -c models/episodic_dual/checkpoint_70000 \
     --output_directory=models/$name --log_directory=logs/$name 
     #-c models/pretrained/mellotron_libritts.pt --warm_start \
 
