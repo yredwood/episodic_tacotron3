@@ -25,11 +25,12 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/episodic_dual/checkpoint_24000'
+checkpoint_path = 'models/episodic_dual/checkpoint_70000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
-audio_path = 'filelists/libri100_val.txt'
-num_support_save = 5
+#audio_path = 'filelists/libri100_val.txt'
+audio_path = 'filelists/trump.txt'
+num_support_save = 4
 
 test_text_list = [
     'AITRICS leads the race to optimized precision care, strengthening and trust.',
@@ -41,11 +42,12 @@ test_text_list = [
             + 'she could have done so with very little trouble',
 ]
 
-use_griffin_lim = False
+use_griffin_lim = True
 
-#supportset_sid = '2952'  # m
+supportset_sid = '2952'  # m
 #supportset_sid = '1069' # f 
-supportset_sid = '8123' # f 
+#supportset_sid = '8123' # f 
+supportset_sid = '5001'
 output_root = 'audios'
 
 output_dir = os.path.join(
@@ -99,6 +101,14 @@ def decode(mel_outputs_postnet):
         spec_from_mel = spec_from_mel * spec_from_mel_scaling
         waveform = griffin_lim(torch.autograd.Variable(spec_from_mel[:, :, :-1]), 
                 taco_stft.stft_fn, 60)
+
+#    if use_griffin_lim:
+#        frame_shift_ms = hparams.hop_length * 1000. / hparams.sample_rate
+#        frame_length_ms = hparams.win_length * 1000. / hparams.sample_rate
+#
+#        ap = AudioProcessor(hparams.sample_rate, hparams.n_mel_channels, 
+#                1025, 
+
     else:
         waveform = denoiser(waveglow.infer(mel_outputs_postnet, sigma=0.8), 0.01)[:,0]
 
