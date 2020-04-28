@@ -18,8 +18,13 @@ class Tacotron2Logger(SummaryWriter):
 
     def log_validation(self, reduced_loss, model, y, y_pred, iteration):
         self.add_scalar("validation.loss", reduced_loss, iteration)
-        _, mel_outputs, gate_outputs, alignments, _ = y_pred
-        mel_targets, gate_targets, _ = y
+
+        mel_outputs = y_pred['mel_post']
+        gate_outputs = y_pred['gate']
+        alignments = y_pred['alignments']
+
+        mel_targets = y['mel']
+        gate_targets = y['gate']
 
         # plot distribution of parameters
         for tag, value in model.named_parameters():
