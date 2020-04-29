@@ -40,4 +40,4 @@ class EpisodicLoss(nn.Module):
 
         gate_loss = nn.BCEWithLogitsLoss()(pred['gate'], label['gate'])
         
-        return mel_loss + gate_loss + lin_loss / 8.0
+        return mel_loss + gate_loss + lin_loss
