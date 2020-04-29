@@ -20,20 +20,24 @@ class Tacotron2Loss(nn.Module):
         return mel_loss + gate_loss
 
 class EpisodicLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, hparams):
         super(EpisodicLoss, self).__init__()
+        self.lin_freq = int(3000 / (hparams.sampling_rate * 0.5) * (hparams.n_lin_channels))
 
     def forward(self, pred, label):
         #mel_target, gate_target, style_target = targets
         label['mel'].requires_grad = False
+        label['lin'].requires_grad = False
         label['gate'].requires_grad = False
         label['gate'] = label['gate'].view(-1,1)
-
         pred['gate'] = pred['gate'].view(-1,1)
 
         mel_loss = nn.MSELoss()(pred['mel'], label['mel']) \
                 + nn.MSELoss()(pred['mel_post'], label['mel'])
 
+        lin_loss = 0.5 * nn.MSELoss()(pred['lin_post'], label['lin']) \
+                + 0.5 * nn.MSELoss()(pred['lin_post'][:,:self.lin_freq] , label['lin'][:,:self.lin_freq])
+
         gate_loss = nn.BCEWithLogitsLoss()(pred['gate'], label['gate'])
         
-        return mel_loss + gate_loss
+        return mel_loss + gate_loss + lin_loss / 8.0

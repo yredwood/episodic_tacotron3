@@ -17,6 +17,7 @@ from loss_function import Tacotron2Loss, EpisodicLoss
 from logger import Tacotron2Logger
 from hparams import create_hparams
 
+import pdb
 
 def reduce_tensor(tensor, n_gpus):
     rt = tensor.clone()
@@ -232,7 +233,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
         model = apply_gradient_allreduce(model)
     
     if hparams.criterion == 'episodic-loss':
-        criterion = EpisodicLoss()
+        criterion = EpisodicLoss(hparams)
     elif hparams.criterion == 'tacotron2-loss':
         criterion = Tacotron2Loss()
 

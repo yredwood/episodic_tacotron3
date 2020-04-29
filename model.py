@@ -739,8 +739,9 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.encoder = Encoder(hparams)
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams, hparams.n_mel_channels, hparams.n_mel_channels)
-#        self.lin_postnet = Postnet(hparams, hparams.n_mel_channels, hparams.n_lin_channels)
-#        self.lin_proj = nn.Linear(hparams.n_mel_channels, hparams.n_lin_channels)
+
+        self.lin_postnet = Postnet(hparams, hparams.n_mel_channels, hparams.n_lin_channels)
+        self.lin_proj = nn.Linear(hparams.n_mel_channels, hparams.n_lin_channels, bias=True)
 
         if hparams.transformer_type == 'single':
             self.gst = TransformerStyleTokenLayer(hparams)
@@ -766,22 +767,25 @@ class EpisodicTacotronTransformer(Tacotron2):
         q_mel_padded      = to_gpu(batch['query']['mel_padded']).float()
         q_mel_length      = to_gpu(batch['query']['output_lengths']).long()
         q_gate_padded     = to_gpu(batch['query']['gate_padded']).float()
+        q_lin_padded      = to_gpu(batch['query']['lin_padded']).float()
 
         s_text_padded     = to_gpu(batch['support']['text_padded']).long()
         s_text_length     = to_gpu(batch['support']['input_lengths']).long()
         s_mel_padded      = to_gpu(batch['support']['mel_padded']).float()
         s_mel_length      = to_gpu(batch['support']['output_lengths']).long()
         s_gate_padded     = to_gpu(batch['support']['gate_padded']).float()
+        s_lin_padded      = to_gpu(batch['support']['lin_padded']).float()
 
         # get style embedding
         #style_target = self.gst.encoder(q_mel_padded) 
         #style_target = self.gst.stl(style_target) # bsz,1,token_embedding_size
-        style_target = self.gst.get_style(q_mel_padded)
+        #style_target = self.gst.get_style(q_mel_padded)
 
         y = {
             'mel': q_mel_padded,
             'gate': q_gate_padded,
             'style': None,
+            'lin': q_lin_padded,
         }
         
         x = {
@@ -790,12 +794,14 @@ class EpisodicTacotronTransformer(Tacotron2):
                 'text_length': q_text_length,
                 'mel_padded' : q_mel_padded,
                 'mel_length' : q_mel_length,
+                'lin_padded' : q_lin_padded,
             },
             'support': {
                 'text_padded': s_text_padded,
                 'text_length': s_text_length,
                 'mel_padded' : s_mel_padded,
                 'mel_length' : s_mel_length,
+                'lin_padded' : s_lin_padded,
             },
         } # x goes to model forward input, y goes to loss function input
         return (x, y)
@@ -831,17 +837,17 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
-#        lin_outputs_postnet = self.lin_postnet(mel_outputs)
-#        lin_outputs_postnet = self.lin_proj(mel_outputs.transpose(-1,-2)).transpose(-1,-2) \
-#                + lin_outputs_postnet
+        lin_outputs_postnet = self.lin_postnet(mel_outputs)
+        lin_outputs_postnet = self.lin_proj(mel_outputs.transpose(-1,-2)).transpose(-1,-2) \
+                + lin_outputs_postnet
 
         output = {
-            'mel': self._masked_output(mel_outputs, query_set['mel_length']),
-            'mel_post': self._masked_output(mel_outputs_postnet, query_set['mel_length']),
-#            'lin_post': self._masked_output(lin_outputs_postnet, query_set['mel_length']),
-            'gate': self._masked_output(gate_outputs.unsqueeze(1), query_set['mel_length']),
+            'mel': self._masked_output(mel_outputs, query_set['mel_length'].data),
+            'mel_post': self._masked_output(mel_outputs_postnet, query_set['mel_length'].data),
+            'gate': self._masked_output(gate_outputs.unsqueeze(1), query_set['mel_length'].data, 1e+3),
             'style': None,
             'alignments': alignments,
+            'lin_post': self._masked_output(lin_outputs_postnet, query_set['mel_length']),
         } # output goes to loss function
         return output
 
@@ -851,22 +857,22 @@ class EpisodicTacotronTransformer(Tacotron2):
         query_set = inputs['query']
         ref_idx = inputs['ref_idx']
 
-        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
-        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+        query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
 
 
-        style_all = self.gst.get_style(support_set[2])
-        style_single = self.gst.get_style(support_set[2][ref_idx:ref_idx+1])
+        style_all = self.gst.get_style(support_set['mel_padded'])
+        style_single = self.gst.get_style(support_set['mel_padded'][ref_idx:ref_idx+1])
         #style_single = style_all[ref_idx:ref_idx+1]
         global_style = self.gst.pma(style_all.transpose(0,1))
         global_style = self.gst.pma_post(global_style)
         
-        style_embedding = torch.cat((style_single, global_style), dim=-1).repeat(1,query_text_embedding.size(1),1)
+        style_embedding = torch.cat((style_single, global_style), 
+                dim=-1).repeat(1,query_text_embedding.size(1),1)
 
 #        style_embedding = self.gst(support_set[0], None,
 #                None, None, support_set[2])
 #        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
-
 
         encoder_outputs = torch.cat(
                 (query_text_embedding, style_embedding), dim=2)
@@ -881,16 +887,17 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         lin_outputs_postnet = self.lin_postnet(mel_outputs)
-        lin_outputs_postnet = self.lin_proj(mel_outputs) + lin_output_postnet
+        lin_outputs_postnet = self.lin_proj(mel_outputs.transpose(-1,-2)).transpose(-1,-2) \
+                + lin_outputs_postnet
 
-#        mel_outputs = mel_outputs[ref_idx:ref_idx+1]
-#        mel_outputs_postnet = mel_outputs_postnet[ref_idx:ref_idx+1]
-#        gate_outputs = gate_outputs[ref_idx:ref_idx+1]
-#        alignments = alignments[ref_idx:ref_idx+1]
-
-        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
-
-        return out
+        output = {
+            'mel': mel_outputs,
+            'mel_post': mel_outputs_postnet,
+            'gate': gate_outputs,
+            'alignments': alignments,
+            'lin_post': lin_outputs_postnet,
+        }
+        return output
 
 
     def _forward(self, inputs):

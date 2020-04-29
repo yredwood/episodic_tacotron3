@@ -28,8 +28,8 @@ import pdb
 checkpoint_path = 'models/episodic_dual/checkpoint_70000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
-#audio_path = 'filelists/libri100_val.txt'
-audio_path = 'filelists/trump.txt'
+audio_path = 'filelists/libri100_val.txt'
+#audio_path = 'filelists/trump.txt'
 num_support_save = 4
 
 test_text_list = [
@@ -47,7 +47,7 @@ use_griffin_lim = True
 supportset_sid = '2952'  # m
 #supportset_sid = '1069' # f 
 #supportset_sid = '8123' # f 
-supportset_sid = '5001'
+#supportset_sid = '5001'
 output_root = 'audios'
 
 output_dir = os.path.join(
@@ -101,6 +101,7 @@ def decode(mel_outputs_postnet):
         spec_from_mel = spec_from_mel * spec_from_mel_scaling
         waveform = griffin_lim(torch.autograd.Variable(spec_from_mel[:, :, :-1]), 
                 taco_stft.stft_fn, 60)
+        pdb.set_trace()
 
 #    if use_griffin_lim:
 #        frame_shift_ms = hparams.hop_length * 1000. / hparams.sample_rate
@@ -122,7 +123,7 @@ stft = TacotronSTFT(hparams.filter_length, hparams.hop_length, hparams.win_lengt
 
 # load tacotron2 model
 model = load_model(hparams).cuda().eval()
-model.load_state_dict(torch.load(checkpoint_path)['state_dict'])
+#model.load_state_dict(torch.load(checkpoint_path)['state_dict'])
 
 # load waveglow model
 waveglow = torch.load(waveglow_path)['model'].cuda().eval()
@@ -152,7 +153,7 @@ if hparams.model_name == 'episodic-transformer':
 
         # 1. save original mel spec
         fname_wav = os.path.join(output_dir, 'ref_true_{}.wav'.format(i))
-        mel_outputs_postnet = x['support'][2][ref_idx:ref_idx+1]
+        mel_outputs_postnet = x['support']['mel_padded'][ref_idx:ref_idx+1]
         # remove pad
         mel_len = (mel_outputs_postnet.mean(1) != 0).sum()
         mel_outputs_postnet = mel_outputs_postnet[:,:,:mel_len]
