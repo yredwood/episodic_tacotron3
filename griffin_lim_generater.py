@@ -15,7 +15,6 @@ matplotlib.use('Agg')
 from audio_processing import griffin_lim
 from hparams import create_hparams
 from model import load_model
-from waveglow.denoiser import Denoiser
 from layers import TacotronSTFT
 from data_utils import TextMelLoader, TextMelCollate
 from data_utils import EpisodicLoader, EpisodicCollater, EpisodicBatchSampler
@@ -25,7 +24,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/lin_mels_2_test/checkpoint_12000'
+checkpoint_path = 'models/libri_lin_spec/checkpoint_5000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'
@@ -91,9 +90,9 @@ model = load_model(hparams).cuda().eval()
 model.load_state_dict(torch.load(checkpoint_path)['state_dict'])
 
 # load waveglow model
-waveglow = torch.load(waveglow_path)['model'].cuda().eval()
-denoiser = Denoiser(waveglow).cuda().eval()
-
+#waveglow = torch.load(waveglow_path)['model'].cuda().eval()
+#denoiser = Denoiser(waveglow).cuda().eval()
+#
 arpabet_dict = cmudict.CMUDict('data/cmu_dictionary')
 
 if hparams.model_name == 'episodic-transformer':

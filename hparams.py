@@ -105,7 +105,7 @@ def create_hparams(hparams_string=None, verbose=False):
         # Optimization Hyperparameters #
         ################################
         use_saved_learning_rate=False,
-        learning_rate=1e-4,
+        learning_rate=1e-3,
         learning_rate_min=1e-5,
         learning_rate_anneal=20000,
         weight_decay=1e-6,

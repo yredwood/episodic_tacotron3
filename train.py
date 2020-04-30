@@ -132,8 +132,8 @@ def warm_start_model(checkpoint_path, model, ignore_layers):
     '''
     change it can be capable of restoring params with different subset
     '''
-    assert os.path.isfile(checkpoint_path)
     print("Warm starting model from checkpoint '{}'".format(checkpoint_path))
+    assert os.path.isfile(checkpoint_path)
     checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
     saved_dict = checkpoint_dict['state_dict']
     restore_dict = {}

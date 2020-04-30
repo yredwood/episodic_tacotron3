@@ -1,0 +1,1 @@
+apex/ --global-option="--cpp_ext" --global-option="--cuda_ext" 
