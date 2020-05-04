@@ -130,6 +130,7 @@ def create_hparams(hparams_string=None, verbose=False):
         num_query = 16,
         criterion = 'episodic-loss',  # [episodic-loss, tacotron2-loss]
 
+        n_lin_channels=513,
     )
 
     if hparams_string:

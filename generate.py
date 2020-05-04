@@ -25,7 +25,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/transformer_again2424_lr1e03_aneal2000/checkpoint_2500'
+checkpoint_path = 'models/lin_spec_re/checkpoint_20000'
 waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 #waveglow_path = 'models/pretrained/waveglow_46000'
 audio_path = 'filelists/libri100_val.txt'

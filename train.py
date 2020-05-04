@@ -232,7 +232,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
         model = apply_gradient_allreduce(model)
     
     if hparams.criterion == 'episodic-loss':
-        criterion = EpisodicLoss()
+        criterion = EpisodicLoss(hparams)
     elif hparams.criterion == 'tacotron2-loss':
         criterion = Tacotron2Loss()
 

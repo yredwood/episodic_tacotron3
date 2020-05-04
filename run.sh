@@ -10,15 +10,15 @@ cmd2=$2
 #    -c models/pretrained/mellotron_libritts.pt --warm_start \
 #    --output_directory=models/$name --log_directory=logs/$name 
 
-name=test33
+name=lin_spec_re
 CUDA_VISIBLE_DEVICES=4,5,6,7 python -m multiproc train.py --hparams=distributed_run=True \
-    -c models/episodic_dual/checkpoint_70000 \
+    -c models/lin_spec_re/checkpoint_22500 \
     --output_directory=models/$name --log_directory=logs/$name 
     #-c models/pretrained/mellotron_libritts.pt --warm_start \
 
 
 #name=test2
 #CUDA_VISIBLE_DEVICES=0 python train.py --hparams=distributed_run=False \
-#    -c models/episodic_dual/checkpoint_70000 --warm_start \
+#    -c models/pretrained/mellotron_libritts.pt --warm_start \
 #    --output_directory=models/$name --log_directory=logs/$name 
-    #-c models/pretrained/mellotron_libritts.pt --warm_start \
+    #-c models/episodic_dual/checkpoint_70000 --warm_start \

@@ -91,3 +91,11 @@ class TacotronSTFT(torch.nn.Module):
         mel_output = torch.matmul(self.mel_basis, magnitudes)
         mel_output = self.spectral_normalize(mel_output)
         return mel_output
+
+    def get_spectrograms(self, y):
+        magnitudes, phases = self.stft_fn.transform(y)
+        magnitudes = magnitudes.data
+        lin_output = self.spectral_normalize(magnitudes)
+        mel_output = torch.matmul(self.mel_basis, magnitudes)
+        mel_output = self.spectral_normalize(mel_output)
+        return mel_output, lin_output

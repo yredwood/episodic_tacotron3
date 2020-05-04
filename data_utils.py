@@ -237,6 +237,18 @@ class EpisodicLoader(TextMelLoader):
         melspec = torch.squeeze(melspec, 0)
         return melspec
 
+    def get_mels(self, filepath):
+        wav, sampling_rate = load_wav_to_torch(filepath)
+        if sampling_rate != self.stft.sampling_rate:
+            raise ValueError("{} SR doesn't match target {} SR".format(
+                sampling_rate, self.stft.sampling_rate))
+        audio_norm = wav / self.max_wav_value
+        audio_norm = audio_norm.unsqueeze(0)
+        melspec, linspec = self.stft.get_spectrograms(audio_norm)
+        melspec = torch.squeeze(melspec, 0)
+        linspec = torch.squeeze(linspec, 0)
+        return melspec, linspec
+
     def get_mel_and_f0(self, filepath):
         audio, sampling_rate = load_wav_to_torch(filepath)
         if sampling_rate != self.stft.sampling_rate:
@@ -260,6 +272,21 @@ class EpisodicLoader(TextMelLoader):
         mel = self.get_mel_and_f0(audiopath)
         speaker_id = self.get_speaker_id(speaker)
         return (text, mel, speaker_id, audiopath)
+
+
+    def __getitem__(self, index):
+        audiopath, text, speaker = self.audiopaths_and_text[index]
+        text = self.get_text(text)
+        melspec, linspec = self.get_mels(audiopath)
+        speaker_id = self.get_speaker_id(speaker)
+        output = {
+            'text': text,
+            'melspec': melspec,
+            'linspec': linspec,
+            'speakerid': speaker_id,
+            'audiopath': audiopath,
+        }
+        return output
 
 
 class EpisodicBatchSampler():
@@ -361,7 +388,7 @@ class EpisodicCollater():
         collater function should split query and support set
         each batch contains (text, mel, sid, f0)
         '''
-        sids = torch.unique(torch.stack([b[2] for b in batch]))
+        sids = torch.unique(torch.stack([b['speakerid'] for b in batch]))
         assert len(sids) == 1 # accept only sinlge sid 
 
         support_set_batches = batch[:self.ns]
@@ -375,18 +402,19 @@ class EpisodicCollater():
 
     def _subset_collater(self, batch):
         input_lengths, ids_sorted_decreasing = torch.sort(
-                torch.LongTensor([len(x[0]) for x in batch]),
+                torch.LongTensor([len(x['text']) for x in batch]),
                 dim=0, descending=True)
         max_input_len = input_lengths[0]
 
         text_padded = torch.LongTensor(len(batch), max_input_len)
         text_padded.zero_()
         for i in range(len(ids_sorted_decreasing)):
-            text = batch[ids_sorted_decreasing[i]][0]
+            text = batch[ids_sorted_decreasing[i]]['text']
             text_padded[i, :text.size(0)] = text
 
-        num_mels = batch[0][1].size(0)
-        max_target_len = max([x[1].size(1) for x in batch])
+        num_mels = batch[0]['melspec'].size(0)
+        num_lins = batch[0]['linspec'].size(0)
+        max_target_len = max([x['melspec'].size(1) for x in batch])
         
         if max_target_len % self.n_frames_per_step != 0:
             max_target_len += self.n_frames_per_step - max_target_len % self.n_frames_per_step
@@ -395,6 +423,8 @@ class EpisodicCollater():
         # include mel padded, gate padded and speaker ids
         mel_padded = torch.FloatTensor(len(batch), num_mels, max_target_len)
         mel_padded.zero_()
+        lin_padded = torch.FloatTensor(len(batch), num_lins, max_target_len)
+        lin_padded.zero_()
         gate_padded = torch.FloatTensor(len(batch), max_target_len)
         gate_padded.zero_()
         output_lengths = torch.LongTensor(len(batch))
@@ -402,17 +432,20 @@ class EpisodicCollater():
         datapath = []
 
         for i in range(len(ids_sorted_decreasing)):
-            mel = batch[ids_sorted_decreasing[i]][1]
+            mel = batch[ids_sorted_decreasing[i]]['melspec']
             mel_padded[i, :, :mel.size(1)] = mel
+            lin = batch[ids_sorted_decreasing[i]]['linspec']
+            lin_padded[i, :, :mel.size(1)] = lin
             gate_padded[i, mel.size(1)-1:] = 1
             output_lengths[i] = mel.size(1)
-            speaker_ids[i] = batch[ids_sorted_decreasing[i]][2]
-            datapath.append(batch[ids_sorted_decreasing[i]][3])
+            speaker_ids[i] = batch[ids_sorted_decreasing[i]]['speakerid']
+            datapath.append(batch[ids_sorted_decreasing[i]]['audiopath'])
 
         outputs = {
             'text_padded': text_padded,
             'input_lengths': input_lengths,
             'mel_padded': mel_padded,
+            'lin_padded': lin_padded,
             'gate_padded': gate_padded,
             'output_lengths': output_lengths,
             'speaker_ids': speaker_ids,
