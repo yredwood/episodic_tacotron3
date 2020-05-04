@@ -11,6 +11,7 @@ import torch
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
+from waveglow.denoiser import Denoiser
 
 from audio_processing import griffin_lim
 from hparams import create_hparams
