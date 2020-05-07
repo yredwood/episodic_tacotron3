@@ -10,11 +10,11 @@ cmd2=$2
 #    -c models/pretrained/mellotron_libritts.pt --warm_start \
 #    --output_directory=models/$name --log_directory=logs/$name 
 
-name=test33
-CUDA_VISIBLE_DEVICES=4,5,6,7 python -m multiproc train.py --hparams=distributed_run=True \
-    -c models/episodic_dual/checkpoint_70000 \
-    --output_directory=models/$name --log_directory=logs/$name 
-    #-c models/pretrained/mellotron_libritts.pt --warm_start \
+#name=libri__episodic_dual
+#CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m multiproc train.py --hparams=distributed_run=True \
+#    -c models/pretrained/mellotron_libritts.pt --warm_start \
+#    --output_directory=models/$name --log_directory=logs/$name 
+    #-c models/episodic_dual/checkpoint_70000 \
 
 
 #name=test2
@@ -22,3 +22,9 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 python -m multiproc train.py --hparams=distributed_
 #    -c models/episodic_dual/checkpoint_70000 --warm_start \
 #    --output_directory=models/$name --log_directory=logs/$name 
     #-c models/pretrained/mellotron_libritts.pt --warm_start \
+
+name=vctk_episodic_dual_24k
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m multiproc train.py \
+        --hparams=training_files=filelists/vctk_train.txt,validation_files=filelists/vctk_val.txt,distributed_run=True \
+        -c models/pretrained/mellotron_libritts.pt --warm_start \
+        --output_directory=models/$name --log_directory=logs/$name
