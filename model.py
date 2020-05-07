@@ -561,6 +561,25 @@ class Decoder(nn.Module):
         return mel_outputs, gate_outputs, alignments
 
 
+class MINE(nn.Module):
+    def __init__(self, hparams):
+        super().__init__()
+        self.z0_dim = 256
+        self.z1_dim = 128
+        self.mine = nn.Linear(self.z0_dim + self.z1_dim, 1)
+        self.ma_et = 1.0
+        self.ma_rate = 0.95
+
+    def forward(self, z0, z1):
+        # z1: (bsz, dim)
+        # -> et, t
+        rand_idx = torch.randperm(z1.size(0))
+        z1_bar = z1[rand_idx]
+
+        t = self.mine(torch.cat((z0,z1), dim=-1))
+        et = self.mine(torch.cat((z0,z1_bar), dim=-1))
+        return t, torch.exp(et)
+
 class Tacotron2(nn.Module):
     def __init__(self, hparams):
         super(Tacotron2, self).__init__()
@@ -739,6 +758,9 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.encoder = Encoder(hparams)
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams)
+
+        #self.mine = MINE(hparams)
+
         if hparams.transformer_type == 'single':
             self.gst = TransformerStyleTokenLayer(hparams)
             self.forward = self._forward
@@ -772,44 +794,85 @@ class EpisodicTacotronTransformer(Tacotron2):
         s_mel_length      = to_gpu(batch['support']['output_lengths']).long()
         s_gate_padded     = to_gpu(batch['support']['gate_padded']).float()
 
-        # get style embedding
-        #style_target = self.gst.encoder(q_mel_padded) 
-        #style_target = self.gst.stl(style_target) # bsz,1,token_embedding_size
-        style_target = self.gst.get_style(q_mel_padded)
-
-        y = (q_mel_padded, q_gate_padded, style_target.squeeze(1))
-        x = {
-            'query': (q_text_padded, q_text_length, q_mel_padded, q_mel_length),
-            'support': (s_text_padded, s_text_length, s_mel_padded, s_mel_length),
+        y = {
+            'mel': q_mel_padded,
+            'gate': q_gate_padded,
+            'style': None,
         }
+        x = {
+            'query': {
+                'text_padded': q_text_padded,
+                'text_length': q_text_length,
+                'mel_padded': q_mel_padded,
+                'mel_length': q_mel_length,
+            },
+            'support': {
+                'text_padded': s_text_padded,
+                'text_length': s_text_length,
+                'mel_padded': s_mel_padded,
+                'mel_length': s_mel_length,
+            },
+        }
+
         return (x, y)
+
+    def _masked_output(self, x, mask, value=0.0):
+        if self.mask_padding and mask is not None:
+            # x.size(): bsz, dim, t
+            #mask = ~get_mask_from_lengths(x_length) # x.size(0),x.size(-1): bsz, t
+            mask = mask.view(x.size(0),1,x.size(-1))
+            mask = mask.expand(x.size(0),x.size(1),x.size(-1))
+            x.data.masked_fill_(mask, value)
+        return x
 
     def _dual_baseline_forward(self, inputs):
         # only use query set
         support_set = inputs['support']
         query_set = inputs['query']
 
-        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
-        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+        query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
 
-        style_embedding = self.gst(query_text_embedding, None,
-                None, None, support_set[2])
-        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+#        style_embedding = self.gst(query_text_embedding, None,
+#                None, None, support_set['mel_padded'])
+#        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+
+        z0, z1 = self.gst(query_text_embedding, None,
+                None, None, support_set['mel_padded'])
+        _z0 = z0.repeat(1,query_text_embedding.size(1),1)
+        _z1 = z1.repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
-                (query_text_embedding, style_embedding), dim=2)
+                (query_text_embedding, _z0, _z1), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
-                encoder_outputs, query_set[2], memory_lengths=query_set[1].data, f0s=None)
+                encoder_outputs, query_set['mel_padded'], 
+                memory_lengths=query_set['text_length'].data, f0s=None)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
-            style_embedding[:,0,:self.token_embedding_size]],
-                query_set[3].data)
+            None], query_set['mel_length'].data)
+        output = {
+            'mel': out[0],
+            'mel_post': out[1],
+            'gate': out[2],
+            'alignments': out[3],
+            'style': None,
+        }
+#        mask = ~get_mask_from_lengths(query_set['mel_length'].data)
+#        output = {
+#            'mel': self._masked_output(mel_outputs, mask),
+#            'mel_post': self._masked_output(mel_outputs_postnet, mask),
+#            'gate': self._masked_output(gate_outputs.unsqueeze(1), mask, value=1e3),
+#            'style': None,
+#            'alignments': alignments,
+#            'z0': z0,
+#            'z1': z1,
+#        }
 
-        return out
+        return output
 
     def _dual_baseline_inference(self, inputs):
         # only use query set
@@ -817,11 +880,11 @@ class EpisodicTacotronTransformer(Tacotron2):
         query_set = inputs['query']
         ref_idx = inputs['ref_idx']
 
-        query_text_embedding = self.embedding(query_set[0]).transpose(1,2)
-        query_text_embedding = self.encoder(query_text_embedding, query_set[1].data)
+        query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
+        query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
 
-        style_all = self.gst.get_style(support_set[2])
-        style_single = self.gst.get_style(support_set[2][ref_idx:ref_idx+1])
+        style_all = self.gst.get_style(support_set['mel_padded'])
+        style_single = self.gst.get_style(support_set['mel_padded'][ref_idx:ref_idx+1])
         #style_single = style_all[ref_idx:ref_idx+1]
         global_style = self.gst.pma(style_all.transpose(0,1))
         global_style = self.gst.pma_post(global_style)
@@ -850,6 +913,12 @@ class EpisodicTacotronTransformer(Tacotron2):
 #        alignments = alignments[ref_idx:ref_idx+1]
 
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
+#        output = {
+#            'mel': mel_outputs,
+#            'mel_post': mel_outputs_postnet,
+#            'gate': gate_outputs,
+#            'alignments': alignments,
+#        }
 
         return out
 

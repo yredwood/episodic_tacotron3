@@ -16,7 +16,7 @@ def create_hparams(hparams_string=None, verbose=False):
         fp16_run=False,
         distributed_run=False,
         dist_backend="nccl",
-        dist_url="tcp://localhost:54323",
+        dist_url="tcp://localhost:54324",
         cudnn_enabled=True,
         cudnn_benchmark=False,
         ignore_layers=['speaker_embedding.weight'],
@@ -104,7 +104,7 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Optimization Hyperparameters #
         ################################
-        use_saved_learning_rate=False,
+        use_saved_learning_rate=True,
         learning_rate=1e-3,
         learning_rate_min=1e-5,
         learning_rate_anneal=30000,

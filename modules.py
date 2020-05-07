@@ -180,14 +180,14 @@ class DualTransformerBaseline(nn.Module):
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         # rmel == same as query set
-        style_embed = self.get_style(rmel) # bsz, 1, dim
+        z0 = self.get_style(rmel) # bsz, 1, dim
         
         # global style
-        global_style = self.pma(style_embed.transpose(0,1)).repeat(text.size(0),1,1)
-        global_style = self.pma_post(global_style)
+        z1 = self.pma(z0.transpose(0,1)).repeat(text.size(0),1,1)
+        z1 = self.pma_post(z1)
 
-        style_token = torch.cat((style_embed, global_style), dim=-1)
-        return style_token 
+        #style_token = torch.cat((style_embed, global_style), dim=-1)
+        return z0, z1
         
 
 class DualTransformerStyleLayer(nn.Module):

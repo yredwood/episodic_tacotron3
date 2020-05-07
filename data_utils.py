@@ -255,11 +255,18 @@ class EpisodicLoader(TextMelLoader):
         return text_norm
 
     def __getitem__(self, index):
-        audiopath, text, speaker = self.audiopaths_and_text[index]
+        audio_path, text, speaker = self.audiopaths_and_text[index]
         text = self.get_text(text)
-        mel = self.get_mel_and_f0(audiopath)
+        mel = self.get_mel_and_f0(audio_path)
         speaker_id = self.get_speaker_id(speaker)
-        return (text, mel, speaker_id, audiopath)
+
+        output = {
+            'text': text,
+            'mel': mel,
+            'speaker_id': speaker_id,
+            'audio_path': audio_path,
+        }
+        return output
 
 
 class EpisodicBatchSampler():
@@ -361,7 +368,7 @@ class EpisodicCollater():
         collater function should split query and support set
         each batch contains (text, mel, sid, f0)
         '''
-        sids = torch.unique(torch.stack([b[2] for b in batch]))
+        sids = torch.unique(torch.stack([b['speaker_id'] for b in batch]))
         assert len(sids) == 1 # accept only sinlge sid 
 
         support_set_batches = batch[:self.ns]
@@ -375,18 +382,18 @@ class EpisodicCollater():
 
     def _subset_collater(self, batch):
         input_lengths, ids_sorted_decreasing = torch.sort(
-                torch.LongTensor([len(x[0]) for x in batch]),
+                torch.LongTensor([len(x['text']) for x in batch]),
                 dim=0, descending=True)
         max_input_len = input_lengths[0]
 
         text_padded = torch.LongTensor(len(batch), max_input_len)
         text_padded.zero_()
         for i in range(len(ids_sorted_decreasing)):
-            text = batch[ids_sorted_decreasing[i]][0]
+            text = batch[ids_sorted_decreasing[i]]['text']
             text_padded[i, :text.size(0)] = text
 
-        num_mels = batch[0][1].size(0)
-        max_target_len = max([x[1].size(1) for x in batch])
+        num_mels = batch[0]['mel'].size(0)
+        max_target_len = max([x['mel'].size(1) for x in batch])
         
         if max_target_len % self.n_frames_per_step != 0:
             max_target_len += self.n_frames_per_step - max_target_len % self.n_frames_per_step
@@ -402,12 +409,12 @@ class EpisodicCollater():
         datapath = []
 
         for i in range(len(ids_sorted_decreasing)):
-            mel = batch[ids_sorted_decreasing[i]][1]
+            mel = batch[ids_sorted_decreasing[i]]['mel']
             mel_padded[i, :, :mel.size(1)] = mel
             gate_padded[i, mel.size(1)-1:] = 1
             output_lengths[i] = mel.size(1)
-            speaker_ids[i] = batch[ids_sorted_decreasing[i]][2]
-            datapath.append(batch[ids_sorted_decreasing[i]][3])
+            speaker_ids[i] = batch[ids_sorted_decreasing[i]]['speaker_id']
+            datapath.append(batch[ids_sorted_decreasing[i]]['audio_path'])
 
         outputs = {
             'text_padded': text_padded,
