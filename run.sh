@@ -17,12 +17,12 @@ cmd2=$2
     #-c models/episodic_dual/checkpoint_70000 \
 
 
-name=vctk_mi
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m multiproc train.py \
+name=vctk_from_scratch
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m multiproc train.py \
     --hparams=training_files=filelists/vctk_train.txt,validation_files=filelists/vctk_val.txt,distributed_run=True \
-    -c models/vctk_episodic_dual_24k/checkpoint_49000 --warm_start \
     --output_directory=models/$name --log_directory=logs/$name 
     #-c models/pretrained/mellotron_libritts.pt --warm_start \
+    #-c models/vctk_episodic_dual_24k/checkpoint_49000 --warm_start \
 
 #name=vctk_episodic_dual_24k
 #CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m multiproc train.py \
