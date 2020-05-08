@@ -758,8 +758,11 @@ class EpisodicTacotronTransformer(Tacotron2):
         self.encoder = Encoder(hparams)
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams)
-
-        #self.mine = MINE(hparams)
+        
+        if hparams.use_mine:
+            self.mine = MINE(hparams)
+        else:
+            self.mine = None
 
         if hparams.transformer_type == 'single':
             self.gst = TransformerStyleTokenLayer(hparams)
@@ -852,27 +855,30 @@ class EpisodicTacotronTransformer(Tacotron2):
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
-        out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments, 
-            None], query_set['mel_length'].data)
+        mask = ~get_mask_from_lengths(query_set['mel_length'].data)
         output = {
-            'mel': out[0],
-            'mel_post': out[1],
-            'gate': out[2],
-            'alignments': out[3],
+            'mel': self._masked_output(mel_outputs, mask),
+            'mel_post': self._masked_output(mel_outputs_postnet, mask),
+            'gate': self._masked_output(gate_outputs.unsqueeze(1), mask, value=1e3).squeeze(1),
             'style': None,
+            'alignments': alignments,
+            'z0': z0,
+            'z1': z1,
         }
-#        mask = ~get_mask_from_lengths(query_set['mel_length'].data)
-#        output = {
-#            'mel': self._masked_output(mel_outputs, mask),
-#            'mel_post': self._masked_output(mel_outputs_postnet, mask),
-#            'gate': self._masked_output(gate_outputs.unsqueeze(1), mask, value=1e3),
-#            'style': None,
-#            'alignments': alignments,
-#            'z0': z0,
-#            'z1': z1,
-#        }
-
         return output
+
+    def get_zs_from_pred(self, pred):
+        z0,z1 = pred['z0'], pred['z1']
+        return z0, z1
+
+    def mi_loss(self, z0, z1):
+        if self.mine is not None:
+            t, et = self.mine(z0, z1)
+            self.mine.ma_et = (1-self.mine.ma_rate)*self.mine.ma_et + self.mine.ma_rate*torch.mean(et)
+            mi_loss = -(torch.mean(t) - (1/self.mine.ma_et.mean()).detach() * torch.mean(et))
+        else:
+            mi_loss = 0.
+        return mi_loss
 
     def _dual_baseline_inference(self, inputs):
         # only use query set

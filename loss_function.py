@@ -37,7 +37,6 @@ class EpisodicLoss(nn.Module):
         gate_out = model_output['gate']
         style_embedding = model_output['style']
 
-
         gate_out = gate_out.view(-1,1)
         mel_loss = nn.MSELoss()(mel_out, mel_target) + \
                 nn.MSELoss()(mel_out_postnet, mel_target)

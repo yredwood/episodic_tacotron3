@@ -49,7 +49,7 @@ class TextMelLoader(torch.utils.data.Dataset):
 
     def create_speaker_lookup_table(self, audiopaths_and_text):
         speaker_ids = np.sort(np.unique([x[2] for x in audiopaths_and_text]))
-        d = {int(speaker_ids[i]): i for i in range(len(speaker_ids))}
+        d = {speaker_ids[i]: i for i in range(len(speaker_ids))}
         return d
 
     def get_f0(self, audio, sampling_rate=22050, frame_length=1024,
@@ -71,7 +71,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         return (text, mel, speaker_id, filepath)
 
     def get_speaker_id(self, speaker_id):
-        return torch.IntTensor([self.speaker_ids[int(speaker_id)]])
+        return torch.IntTensor([self.speaker_ids[speaker_id]])
 
     def get_mel_and_f0(self, filepath):
         audio, sampling_rate = load_wav_to_torch(filepath)

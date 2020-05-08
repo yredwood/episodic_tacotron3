@@ -24,6 +24,11 @@ def reduce_tensor(tensor, n_gpus):
     rt /= n_gpus
     return rt
 
+def gather_tensor(tensor, tensor_list):
+    rt = tensor.clone()
+    dist.all_gather(tensor_list, rt)
+    return torch.cat(tensor_list, dim=0)
+
 
 def init_distributed(hparams, n_gpus, rank, group_name):
     assert torch.cuda.is_available(), "Distributed mode requires CUDA."
@@ -275,7 +280,17 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             x, y = model.parse_batch(batch)
             y_pred = model(x)
 
-            loss = criterion(y_pred, y)
+            z0, z1 = model.get_zs_from_pred(y_pred)
+            z0_list = [z0.new_ones(z0.size()) for _ in range(n_gpus)]
+            z1_list = [z1.new_ones(z1.size()) for _ in range(n_gpus)]
+
+            z0_list = gather_tensor(z0, z0_list)
+            z1_list = gather_tensor(z1, z1_list)
+
+            l2_loss = criterion(y_pred, y)
+            mi_loss = model.mi_loss(z0_list, z1_list)
+            loss = l2_loss + mi_loss
+
             if hparams.distributed_run:
                 reduced_loss = reduce_tensor(loss.data, n_gpus).item()
             else:
@@ -302,7 +317,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                 print("Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
                     iteration, reduced_loss, grad_norm, duration))
                 logger.log_training(
-                    reduced_loss, grad_norm, learning_rate, duration, iteration)
+                    reduced_loss, mi_loss, grad_norm, learning_rate, duration, iteration)
 
             if not is_overflow and (iteration % hparams.iters_per_checkpoint == 0):
                 validate(model, criterion, val_loader, iteration, 

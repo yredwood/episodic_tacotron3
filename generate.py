@@ -25,12 +25,13 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/vctk_episodic_dual_24k/checkpoint_44000'
+checkpoint_path = 'models/vctk_episodic_dual_24k/checkpoint_20000'
 #waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 waveglow_path = 'models/waveglow_vctk24k/waveglow_16000'
 #audio_path = 'filelists/libri100_val.txt'
 #audio_path = 'filelists/vctk_val.txt'
-audio_path = 'filelists/vctk_train.txt'
+#audio_path = 'filelists/vctk_train.txt'
+audio_path = 'filelists/trump.txt'
 num_support_save = 5
 
 test_text_list = [
@@ -50,7 +51,8 @@ use_griffin_lim = False
 #supportset_sid = '8123' # f 
 #supportset_sid = 'p313' # f 
 #supportset_sid = 'p281' # f 
-supportset_sid = 'p232' # m
+#supportset_sid = 'p232' # m
+supportset_sid = 'trump' # m
 output_root = 'audios'
 
 output_dir = os.path.join(
