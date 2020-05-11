@@ -24,8 +24,8 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Data Parameters             #
         ################################
-        training_files='filelists/libri100_train.txt',
-        validation_files='filelists/libri100_val.txt',
+        training_files='filelists/vctk_train.txt',
+        validation_files='filelists/vctk_val.txt',
         text_cleaners=['english_cleaners'],
         p_arpabet=1.0,
         cmudict_path="data/cmu_dictionary",
@@ -105,7 +105,7 @@ def create_hparams(hparams_string=None, verbose=False):
         # Optimization Hyperparameters #
         ################################
         use_saved_learning_rate=False,
-        learning_rate=1e-4,
+        learning_rate=1e-3,
         learning_rate_min=1e-5,
         learning_rate_anneal=50000,
         weight_decay=1e-6,
@@ -120,8 +120,8 @@ def create_hparams(hparams_string=None, verbose=False):
         #episodic_training = False,
         #model_name = 'gst-tacotron',
 
-        episodic_training = True, 
-        model_name = 'episodic-baseline', # [tacotron2, episodic-transformer, episodic-baseline]
+        episodic_training = False,
+        model_name = 'gst-tacotron', # [tacotron2, episodic-transformer, episodic-baseline]
         sentence_encoder_dim = 128,
 
         num_common = 16,

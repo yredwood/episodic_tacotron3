@@ -1,11 +1,17 @@
+--upgrade pip
+--upgrade setuptools
+torchvision==0.5.0
+torch==1.4.0
+-e ./apex/ -v
 matplotlib==2.1.0
-tensorflow==1.15.2
 inflect==0.2.5
 librosa==0.6.0
-scipy==1.0.0
-tensorboardX==1.1
+scipy==1.4.1
 Unidecode==1.0.22
 pillow
 nltk==3.4.5
 jamo==0.4.1
 music21
+numba==0.48.0
+numpy==1.16.4
+tensorboardX==2.0

@@ -24,10 +24,11 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/episodic_baseline_no_styletoken/checkpoint_1500'
-waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
-#waveglow_path = '/home/mike/models/waveglow/waveglow_80000'
-audio_path = 'filelists/libri100_val.txt'
+checkpoint_path = 'models/vctk_gst_pretrained_2gpu/checkpoint_24000'
+#waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
+waveglow_path = 'models/waveglow_vctk24k/waveglow_14000'
+#audio_path = 'filelists/libri100_val.txt'
+audio_path = 'filelists/vctk_train.txt'
 num_support_save = 2
 
 test_text_list = [
@@ -40,8 +41,9 @@ test_text_list = [
             + 'she could have done so with very little trouble',
 ]
 
-supportset_sid = '2952'  # m
+#supportset_sid = '2952'  # m
 #supportset_sid = '1069' # f 
+supportset_sid = 'p334' # f 
 output_root = 'audios'
 
 output_dir = os.path.join(

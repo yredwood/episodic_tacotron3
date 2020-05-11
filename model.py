@@ -595,7 +595,7 @@ class Tacotron2(nn.Module):
         #f0_padded = to_gpu(f0_padded).float()
         return ((text_padded, input_lengths, mel_padded, max_len,
                  output_lengths, speaker_ids, filename),
-                (mel_padded, gate_padded))
+                (mel_padded, gate_padded, None))
 
     def parse_output(self, outputs, output_lengths=None):
         if self.mask_padding and output_lengths is not None:
@@ -730,7 +730,7 @@ class EpisodicTacotron_GSTbaseline(Tacotron2):
         gate_padded     = to_gpu(batch['query']['gate_padded']).float()
 
         return ((text_padded, text_length, mel_padded, None, mel_length, None, None), 
-                (mel_padded, gate_padded))
+                (mel_padded, gate_padded, None))
 
 
 class EpisodicTacotronTransformer(Tacotron2):

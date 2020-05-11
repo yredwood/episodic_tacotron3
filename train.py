@@ -179,7 +179,6 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
 def validate(model, criterion, val_loader, iteration, batch_size, n_gpus,
              logger, distributed_run, rank):
     """Handles all the validation scoring and printing"""
-    return
     model.eval()
     with torch.no_grad():
         val_loss = 0.0
