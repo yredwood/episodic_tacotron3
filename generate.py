@@ -24,11 +24,12 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/vctk_gst_pretrained_2gpu/checkpoint_24000'
+checkpoint_path = 'models/vctk_gst_pretrained_2gpu/checkpoint_65000'
 #waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 waveglow_path = 'models/waveglow_vctk24k/waveglow_14000'
 #audio_path = 'filelists/libri100_val.txt'
-audio_path = 'filelists/vctk_train.txt'
+#audio_path = 'filelists/vctk_train.txt'
+audio_path = 'filelists/ladygaga.txt'
 num_support_save = 2
 
 test_text_list = [
@@ -43,7 +44,7 @@ test_text_list = [
 
 #supportset_sid = '2952'  # m
 #supportset_sid = '1069' # f 
-supportset_sid = 'p334' # f 
+supportset_sid = 'ladygaga' # f 
 output_root = 'audios'
 
 output_dir = os.path.join(
