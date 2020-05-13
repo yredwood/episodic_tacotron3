@@ -31,8 +31,8 @@ waveglow_path = 'models/waveglow_vctk24k/waveglow_16000'
 #audio_path = 'filelists/libri100_val.txt'
 #audio_path = 'filelists/vctk_val.txt'
 #audio_path = 'filelists/vctk_train.txt'
-audio_path = 'filelists/trump.txt'
-num_support_save = 5
+audio_path = 'filelists/ladygaga.txt'
+num_support_save = 4
 
 test_text_list = [
     'AITRICS leads the race to optimized precision care, strengthening and trust.',
@@ -52,7 +52,7 @@ use_griffin_lim = False
 #supportset_sid = 'p313' # f 
 #supportset_sid = 'p281' # f 
 #supportset_sid = 'p232' # m
-supportset_sid = 'trump' # m
+supportset_sid = 'ladygaga' # m
 output_root = 'audios'
 
 output_dir = os.path.join(

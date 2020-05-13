@@ -1,0 +1,4 @@
+data-bin/ladygaga/ladygaga_01.wav|Can you do me a favor?|ladygaga
+data-bin/ladygaga/ladygaga_02.wav|And it's challenging because it forces you to go inside yourself.|ladygaga
+data-bin/ladygaga/ladygaga_03.wav|Never ever have wanted to sing that song with any one other than him.|ladygaga
+data-bin/ladygaga/ladygaga_04.wav|It makes my heart sore i'm just so happy.|ladygaga
