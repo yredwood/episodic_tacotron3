@@ -279,7 +279,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             model.zero_grad()
             x, y = model.parse_batch(batch)
             y_pred = model(x)
-
+            
             z0, z1 = model.get_zs_from_pred(y_pred)
             z0_list = [z0.new_ones(z0.size()) for _ in range(n_gpus)]
             z1_list = [z1.new_ones(z1.size()) for _ in range(n_gpus)]

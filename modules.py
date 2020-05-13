@@ -171,6 +171,7 @@ class DualTransformerBaseline(nn.Module):
                 num_heads=self.num_heads, num_seeds=1) # single general speaker style
 
         self.pma_post = nn.Linear(hp.token_embedding_size, hp.speaker_embedding_dim)
+        self.z0_post = nn.Linear(hp.token_embedding_size, hp.token_embedding_size)
 
         self.pre_conv = self.gst.pre_conv # for restore pretrained model
         self.lstm = self.gst.lstm
@@ -181,6 +182,7 @@ class DualTransformerBaseline(nn.Module):
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         # rmel == same as query set
         z0 = self.get_style(rmel) # bsz, 1, dim
+        z0 = self.z0_post(z0)
         
         # global style
         z1 = self.pma(z0.transpose(0,1)).repeat(text.size(0),1,1)

@@ -25,7 +25,7 @@ import pdb
 
 
 # ========== parameters ===========
-checkpoint_path = 'models/vctk_episodic_dual_24k/checkpoint_20000'
+checkpoint_path = 'models/vctk_episodic_dual_scratchpretrained/checkpoint_5000'
 #waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 waveglow_path = 'models/waveglow_vctk24k/waveglow_16000'
 #audio_path = 'filelists/libri100_val.txt'
