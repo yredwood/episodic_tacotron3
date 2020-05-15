@@ -595,6 +595,8 @@ class Tacotron2(nn.Module):
         self.encoder = Encoder(hparams)
         self.decoder = Decoder(hparams)
         self.postnet = Postnet(hparams)
+
+        self.speaker_embedding_dim = hparams.speaker_embedding_dim
         if hparams.with_gst:
             self.gst = GST(hparams)
         print ('tacotron 2 inited')
@@ -631,14 +633,16 @@ class Tacotron2(nn.Module):
             output_lengths, speaker_ids, f0s = inputs
         input_lengths, output_lengths = input_lengths.data, output_lengths.data
         
-
         embedded_inputs = self.embedding(inputs).transpose(1, 2)
         embedded_text = self.encoder(embedded_inputs, input_lengths)
         embedded_gst = self.gst(targets)
         embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
 
+        embedded_speakers = embedded_text.new_zeros(embedded_text.size(0),
+                embedded_text.size(1),self.speaker_embedding_dim)
+
         encoder_outputs = torch.cat(
-            (embedded_text, embedded_gst), dim=2)
+            (embedded_text, embedded_gst, embedded_speakers), dim=2)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
             encoder_outputs, targets, memory_lengths=input_lengths, f0s=f0s)
@@ -654,6 +658,8 @@ class Tacotron2(nn.Module):
         text, style_input = inputs
         embedded_inputs = self.embedding(text).transpose(1, 2)
         embedded_text = self.encoder.inference(embedded_inputs)
+        embedded_speakers = embedded_text.new_zeros(embedded_text.size(0),
+                embedded_text.size(1),self.speaker_embedding_dim)
         if hasattr(self, 'gst'):
             if isinstance(style_input, int):
                 query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
@@ -666,7 +672,7 @@ class Tacotron2(nn.Module):
         if hasattr(self, 'gst'):
             embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
             encoder_outputs = torch.cat(
-                (embedded_text, embedded_gst), dim=2)
+                (embedded_text, embedded_gst, embedded_speakers), dim=2)
         else:
             encoder_outputs = embedded_text
 
@@ -714,20 +720,6 @@ class Tacotron2(nn.Module):
 
 
 class EpisodicTacotron_GSTbaseline(Tacotron2):
-#    def __init__(self, hparams):
-#        super(EpisodicTacotron_GSTbaseline, self).__init__()
-#        self.mask_padding = hparams.mask_padding
-#
-#        self.fp16_run = hparams.fp16_run
-#        self.n_mel_channels =hparams.n_mel_channels
-#        self.n_frames_per_step = hparams.n_frames_per_step
-#
-#        self.encoder = Encoder(hparams)
-#        self.gst = GST(hparams)
-#        self.decoder = Decoder(hparams)
-#        self.postnet = Postnet(hparams)
-
-        #self.p_style_teacher_forcing = hparams.p_style_teacher_forcing
 
     def parse_batch(self, batch):
         '''
