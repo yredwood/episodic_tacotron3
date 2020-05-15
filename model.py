@@ -703,21 +703,8 @@ class Tacotron2(nn.Module):
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
 
 
-class EpisodicTacotron_GSTbaseline(Tacotron2):
-#    def __init__(self, hparams):
-#        super(EpisodicTacotron_GSTbaseline, self).__init__()
-#        self.mask_padding = hparams.mask_padding
-#
-#        self.fp16_run = hparams.fp16_run
-#        self.n_mel_channels =hparams.n_mel_channels
-#        self.n_frames_per_step = hparams.n_frames_per_step
-#
-#        self.encoder = Encoder(hparams)
-#        self.gst = GST(hparams)
-#        self.decoder = Decoder(hparams)
-#        self.postnet = Postnet(hparams)
 
-        #self.p_style_teacher_forcing = hparams.p_style_teacher_forcing
+class EpisodicTacotron_GSTbaseline(Tacotron2):
 
     def parse_batch(self, batch):
         '''
@@ -812,41 +799,6 @@ class EpisodicTacotronTransformer(Tacotron2):
                 query_set[3].data)
                 
         return out
-
-
-
-#    def forward(self, inputs):
-#        # support set 
-#        inputs, input_lengths, targets, max_len, \
-#            output_lengths, speaker_ids, f0s = inputs
-#        input_lengths, output_lengths = input_lengths.data, output_lengths.data
-#        
-#
-#        embedded_inputs = self.embedding(inputs).transpose(1, 2)
-#        embedded_text = self.encoder(embedded_inputs, input_lengths)
-#        #embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
-#        embedded_speakers = embedded_text.new_zeros(embedded_text.size(0), 1, self.speaker_embedding_dim)
-#        embedded_gst = self.gst(targets)
-#        embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
-#        embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
-#
-#        encoder_outputs = torch.cat(
-#            (embedded_text, embedded_gst, embedded_speakers), dim=2)
-#
-#        mel_outputs, gate_outputs, alignments = self.decoder(
-#            encoder_outputs, targets, memory_lengths=input_lengths, f0s=f0s)
-#
-#        mel_outputs_postnet = self.postnet(mel_outputs)
-#        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
-#
-#        return self.parse_output(
-#            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
-#            output_lengths)
-#
-
-
-
-
 
 
 
