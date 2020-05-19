@@ -177,12 +177,13 @@ class DualTransformerBaseline(nn.Module):
         self.lstm = self.gst.lstm
 
     def get_style(self, rmel):
-        return self.gst(rmel)
+        _s = self.gst(rmel)
+        _s = self.z0_post(_s)
+        return _s
 
     def forward(self, text, text_len, rtext, rtext_len, rmel):
         # rmel == same as query set
         z0 = self.get_style(rmel) # bsz, 1, dim
-        z0 = self.z0_post(z0)
         
         # global style
         z1 = self.pma(z0.transpose(0,1)).repeat(text.size(0),1,1)

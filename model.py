@@ -685,39 +685,6 @@ class Tacotron2(nn.Module):
         return self.parse_output(
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
 
-#    def inference_noattention(self, inputs):
-#        # should not be used
-#        text, style_input, speaker_ids, f0s, attention_map = inputs
-#        embedded_inputs = self.embedding(text).transpose(1, 2)
-#        embedded_text = self.encoder.inference(embedded_inputs)
-#        embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
-#        if hasattr(self, 'gst'):
-#            if isinstance(style_input, int):
-#                query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
-#                GST = torch.tanh(self.gst.stl.embed)
-#                key = GST[style_input].unsqueeze(0).expand(1, -1, -1)
-#                embedded_gst = self.gst.stl.attention(query, key)
-#            else:
-#                embedded_gst = self.gst(style_input)
-#
-#        embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
-#        if hasattr(self, 'gst'):
-#            embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
-#            encoder_outputs = torch.cat(
-#                (embedded_text, embedded_gst, embedded_speakers), dim=2)
-#        else:
-#            encoder_outputs = torch.cat(
-#                (embedded_text, embedded_speakers), dim=2)
-#
-#        mel_outputs, gate_outputs, alignments = self.decoder.inference_noattention(
-#            encoder_outputs, f0s, attention_map)
-#
-#        mel_outputs_postnet = self.postnet(mel_outputs)
-#        mel_outputs_postnet = mel_outputs + mel_outputs_postnet
-#
-#        return self.parse_output(
-#            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
-
 
 class EpisodicTacotron_GSTbaseline(Tacotron2):
 
@@ -733,6 +700,33 @@ class EpisodicTacotron_GSTbaseline(Tacotron2):
 
         return ((text_padded, text_length, mel_padded, None, mel_length, None, None), 
                 (mel_padded, gate_padded))
+
+    def get_test_batch(self, batch, ref_ind=-1):
+        # if ref_ind is none: just use the same index with query
+
+        text        = to_gpu(batch['query']['text_padded']).long()
+        text_length = to_gpu(batch['query']['input_lengths']).long()
+
+        mel         = to_gpu(batch['support']['mel_padded']).float()
+        mel_length  = to_gpu(batch['support']['output_lengths']).long()
+
+        tmel        = to_gpu(batch['query']['mel_padded']).float()
+        tmel_length = to_gpu(batch['query']['output_lengths']).long()
+
+        batches = []; refmels = []; tarmels = []
+        for i in range(text.size(0)):
+            idx = i if ref_ind < 0 else ref_ind
+            _t = text[i:i+1][:,:text_length[i]]
+            _m = mel[idx:idx+1][:,:,:mel_length[idx]]
+            _tm = tmel[idx:idx+1][:,:,:tmel_length[idx]]
+            batches.append(
+                (_t, _m)
+            )
+            refmels.append(_m)
+            tarmels.append(_tm)
+
+        return batches, refmels, tarmels
+
 
 
 class EpisodicTacotronTransformer(Tacotron2):
@@ -811,6 +805,38 @@ class EpisodicTacotronTransformer(Tacotron2):
 
         return (x, y)
 
+    def get_test_batch(self, batch, ref_ind=-1):
+        # only accepts the same reference for prediction
+        assert ref_ind < 0
+        q_text_padded     = to_gpu(batch['query']['text_padded']).long()
+        q_text_length     = to_gpu(batch['query']['input_lengths']).long()
+        q_mel_padded      = to_gpu(batch['query']['mel_padded']).float()
+        q_mel_length      = to_gpu(batch['query']['output_lengths']).long()
+
+        s_text_padded     = to_gpu(batch['support']['text_padded']).long()
+        s_text_length     = to_gpu(batch['support']['input_lengths']).long()
+        s_mel_padded      = to_gpu(batch['support']['mel_padded']).float()
+        s_mel_length      = to_gpu(batch['support']['output_lengths']).long()
+        
+        batches, refmels, tarmels = [], [], []
+        for i in range(q_text_padded.size(0)):
+            x = {
+                'query': {
+                    'text_padded': q_text_padded[i:i+1][:,:q_text_length[i]],
+                },
+                'support': {
+                    'mel_padded': s_mel_padded,
+                    'mel_length': s_mel_length,
+                    'mel_gst': s_mel_padded[i:i+1][:,:,:s_mel_length[i]],
+                },
+            }
+            batches.append(x)
+            refmels.append(s_mel_padded[i:i+1][:,:,:s_mel_length[i]])
+            tarmels.append(q_mel_padded[i:i+1][:,:,:q_mel_length[i]])
+        return batches, refmels, tarmels
+
+
+
     def _masked_output(self, x, mask, value=0.0):
         if self.mask_padding and mask is not None:
             # x.size(): bsz, dim, t
@@ -827,10 +853,6 @@ class EpisodicTacotronTransformer(Tacotron2):
 
         query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
         query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
-
-#        style_embedding = self.gst(query_text_embedding, None,
-#                None, None, support_set['mel_padded'])
-#        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
 
         z0, z1 = self.gst(query_text_embedding, None,
                 None, None, support_set['mel_padded'])
@@ -876,47 +898,31 @@ class EpisodicTacotronTransformer(Tacotron2):
         # only use query set
         support_set = inputs['support']
         query_set = inputs['query']
-        ref_idx = inputs['ref_idx']
 
         query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
-        query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
-
-        style_all = self.gst.get_style(support_set['mel_padded'])
-        style_single = self.gst.get_style(support_set['mel_padded'][ref_idx:ref_idx+1])
-        #style_single = style_all[ref_idx:ref_idx+1]
-        global_style = self.gst.pma(style_all.transpose(0,1))
-        global_style = self.gst.pma_post(global_style)
+        query_text_embedding = self.encoder.inference(query_text_embedding)
         
-        style_embedding = torch.cat((style_single, global_style), dim=-1).repeat(1,query_text_embedding.size(1),1)
-
-#        style_embedding = self.gst(support_set[0], None,
-#                None, None, support_set[2])
-#        style_embedding = style_embedding.repeat(1,query_text_embedding.size(1),1)
+        z0 = self.gst.get_style(support_set['mel_gst']).repeat(1,query_text_embedding.size(1),1)
+        z1 = self.gst.get_style(support_set['mel_padded'])
+        z1 = self.gst.pma_post(self.gst.pma(z1.transpose(0,1))).repeat(1,query_text_embedding.size(1),1)
 
         encoder_outputs = torch.cat(
-                (query_text_embedding, style_embedding), dim=2)
+                (query_text_embedding, z0, z1), dim=2
+        )
 
         mel_outputs, gate_outputs, alignments = self.decoder.inference(
                 encoder_outputs, None)
-#
-#        mel_outputs, gate_outputs, alignments = self.decoder(
-#                encoder_outputs, support_set[2], memory_lengths=support_set[1].data, f0s=None)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
-#        mel_outputs = mel_outputs[ref_idx:ref_idx+1]
-#        mel_outputs_postnet = mel_outputs_postnet[ref_idx:ref_idx+1]
-#        gate_outputs = gate_outputs[ref_idx:ref_idx+1]
-#        alignments = alignments[ref_idx:ref_idx+1]
-
         out = self.parse_output([mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
-#        output = {
-#            'mel': mel_outputs,
-#            'mel_post': mel_outputs_postnet,
-#            'gate': gate_outputs,
-#            'alignments': alignments,
-#        }
+        output = {
+            'mel': mel_outputs,
+            'mel_post': mel_outputs_postnet,
+            'gate': gate_outputs,
+            'alignments': alignments,
+        }
 
         return out
 

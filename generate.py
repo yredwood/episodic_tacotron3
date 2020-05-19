@@ -29,7 +29,7 @@ checkpoint_path = 'models/vctk_gst_pretrained_2gpu/checkpoint_151000'
 #waveglow_path = 'models/pretrained/waveglow_256channels_v4.pt'
 waveglow_path = 'models/waveglow_vctk24k/waveglow_14000'
 #audio_path = 'filelists/libri100_val.txt'
-audio_path = 'filelists/vctk_val.txt'
+audio_path = 'filelists/vctk_24val.txt'
 #audio_path = 'filelists/vctk_train.txt'
 #audio_path = 'filelists/ladygaga.txt'
 num_support_save = 4
@@ -124,8 +124,27 @@ model.load_state_dict(torch.load(checkpoint_path)['state_dict'])
 # load waveglow model
 waveglow = torch.load(waveglow_path)['model'].cuda().eval()
 denoiser = Denoiser(waveglow).cuda().eval()
-
 arpabet_dict = cmudict.CMUDict('data/cmu_dictionary')
+
+
+
+
+
+valset = EpisodicLoader(audio_path, hparams)
+collate_fn = EpisodicCollater(1, hparams)
+
+batch_sampler = EpisodicBatchSampler(valset.sid_to_index, hparams, shuffle=False)
+for batch_idx in batch_sampler:
+    _, _, sid = valset.audiopaths_and_text[batch_idx[0]]
+    if sid != supportset_sid:
+        continue
+    batch = collate_fn([valset[idx] for idx in batch_idx])
+    break
+
+x, y = model.parse_batch(batch.copy())
+for i in range(num_support_save):
+    # we should save all of them for evaluation
+
 
 if hparams.model_name == 'episodic-transformer':
     print ('episodic transformer test')
@@ -218,6 +237,10 @@ if hparams.model_name == 'episodic-transformer':
         print (test_text)
 
 
+
+
+# will not be used from here
+# old generation code for testing
 else:
     print ('gst test')
     # dataloader
