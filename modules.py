@@ -304,28 +304,6 @@ class TransformerStyleTokenLayer(nn.Module):
         # bsz, 1, token_embedding_size
         return style
 
-class _MAB_qkv(nn.Module):
-    def __init__(self, dim_q, dim_k, dim_v, dim, num_heads=8, ln=False, p=None):
-        super().__init__()
-        self.num_heads = num_heads
-        self.fc_q = nn.Linear(dim_q, dim)
-        self.fc_k = nn.Linear(dim_k, dim)
-        self.fc_v = nn.Linear(dim_v, dim)
-        self.fc_o = nn.Linear(dim, dim)
-        self.T = nn.Parameter(torch.Tensor(1))
-        nn.init.constant_(self.T, 5.)
-
-    def forward(self, query, key, value, get_attn=False):
-        Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)
-        A_logits = Q @ K.transpose(-2,-1) / math.sqrt(query.size(-1)) * self.T
-        #A_logits = query @ key.transpose(-2,-1) / math.sqrt(query.size(-1)) * self.T
-        A = torch.softmax(A_logits, -1)
-        attn = A @ value
-        out = self.fc_o(attn)
-        if get_attn:
-            return out, A
-        return out
-
 class PMA(nn.Module):
     def __init__(self, dim, num_heads, num_seeds, ln=False):
         super(PMA, self).__init__()
@@ -353,12 +331,6 @@ class MAB_qkv(nn.Module):
         self.T = nn.Parameter(torch.Tensor(1))
         nn.init.constant_(self.T, 10.)
 
-#        self.ln1 = nn.LayerNorm(dim) if ln else nn.Identity()
-#        self.ln2 = nn.LayerNorm(dim) if ln else nn.Identity()
-#        self.dropout1 = nn.Dropout(p=p) if p is not None else nn.Identity()
-#        self.dropout2 = nn.Dropout(p=p) if p is not None else nn.Identity()
-
-
     def forward(self, query, key, value, mask=None, get_attn=False):
         Q, K, V = self.fc_q(query), self.fc_k(key), self.fc_v(value)
         Q_ = torch.cat(Q.chunk(self.num_heads, -1), 0)
@@ -375,13 +347,7 @@ class MAB_qkv(nn.Module):
             A.masked_fill_(torch.isnan(A), 0.0)
         else:
             A = torch.softmax(A_logits, -1)
-        
-#        attn = torch.cat((A @ V_).chunk(self.num_heads, 0), -1)
-#        O = self.ln1(Q + self.dropout1(attn))
-#        O = self.ln2(O + self.dropout2(F.relu(self.fc_o(O))))
-#        if get_attn:
-#            return O, A
-#        return O
+
         attn = torch.cat((A @ V_).chunk(self.num_heads, 0), -1)
         O = self.fc_o(attn)
         if get_attn:
@@ -548,8 +514,6 @@ class GST(nn.Module):
             if sum(pads) == 0:
                 break
         return x_len
-
-
 
 def get_packed_sequence(data, batch_sizes, sorted_indices, unsorted_indices):
         return PackedSequence(data, batch_sizes, sorted_indices, unsorted_indices)

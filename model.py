@@ -8,6 +8,8 @@ from torch.nn import functional as F
 from layers import ConvNorm, LinearNorm
 from utils import to_gpu, get_mask_from_lengths
 from modules import GST, TransformerStyleTokenLayer, DualTransformerStyleLayer, DualTransformerBaseline
+from loss_function import Tacotron2Loss, EpisodicLoss
+from logger import Tacotron2Logger, EpisodicLogger
 import pdb
 
 drop_rate = 0.5
@@ -16,10 +18,19 @@ def load_model(hparams):
 
     if hparams.model_name == 'episodic-baseline':
         model = EpisodicTacotron_GSTbaseline(hparams).cuda()
+        hparams.episodic_training = True
     elif hparams.model_name == 'gst-tacotron':
         model = Tacotron2(hparams).cuda()
+        hparams.episodic_training = False
     elif hparams.model_name == 'episodic-transformer':
         model = EpisodicTacotronTransformer(hparams).cuda()
+        hparams.episodic_training = True
+    elif hparams.model_name == 'dual-attention':
+        from custom_layers import DualAttention
+        model = DualAttention(hparams).cuda()
+        hparams.episodic_training = True
+        # automatically changes loss function and logger
+
     else:
         raise NameError('no model named {}'.format(hparams.model_name))
     print ('model [{}] is loaded'.format(hparams.model_name))
@@ -389,6 +400,7 @@ class Decoder(nn.Module):
         gate_output: gate output energies
         attention_weights:
         """
+
         cell_input = torch.cat((decoder_input, self.attention_context), -1)
         self.attention_hidden, self.attention_cell = self.attention_rnn(
             cell_input, (self.attention_hidden, self.attention_cell))
@@ -684,6 +696,13 @@ class Tacotron2(nn.Module):
 
         return self.parse_output(
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
+    
+    def get_criterion(self, hparams):
+        # only support tacotron2 loss
+        return Tacotron2Loss()
+
+    def get_logger(self, logdir, hparams):
+        return Tacotron2Logger(logdir)
 
 
 class EpisodicTacotron_GSTbaseline(Tacotron2):
@@ -728,7 +747,6 @@ class EpisodicTacotron_GSTbaseline(Tacotron2):
         return batches, refmels, tarmels
 
 
-
 class EpisodicTacotronTransformer(Tacotron2):
     def __init__(self, hparams):
         super(Tacotron2, self).__init__()
@@ -763,8 +781,6 @@ class EpisodicTacotronTransformer(Tacotron2):
             self.forward = self._dual_baseline_forward
             self.inference = self._dual_baseline_inference
             
-#        self.speaker_embedding = nn.Embedding(
-#            hparams.n_speakers, hparams.speaker_embedding_dim)
         self.speaker_embedding_dim = hparams.speaker_embedding_dim
         self.token_embedding_size = hparams.token_embedding_size
         print ('episodic tacotron transformer inited')
@@ -834,7 +850,6 @@ class EpisodicTacotronTransformer(Tacotron2):
             refmels.append(s_mel_padded[i:i+1][:,:,:s_mel_length[i]])
             tarmels.append(q_mel_padded[i:i+1][:,:,:q_mel_length[i]])
         return batches, refmels, tarmels
-
 
 
     def _masked_output(self, x, mask, value=0.0):
@@ -990,6 +1005,12 @@ class EpisodicTacotronTransformer(Tacotron2):
                 
         return out
 
+    def get_criterion(self, hparams):
+        # only support tacotron2 loss
+        return EpisodicLoss()
+
+    def get_logger(self, logdir, hparams):
+        return EpisodicLogger(logdir)
 
 
 #    def forward(self, inputs):

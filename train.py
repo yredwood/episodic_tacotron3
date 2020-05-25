@@ -3,6 +3,7 @@ import time
 import argparse
 import math
 from numpy import finfo
+import pdb
 
 import torch
 from distributed import apply_gradient_allreduce
@@ -14,7 +15,7 @@ from data_utils import EpisodicLoader, EpisodicCollater, EpisodicBatchSampler, D
 from model import load_model
 from data_utils import TextMelLoader, TextMelCollate
 from loss_function import Tacotron2Loss, EpisodicLoss
-from logger import Tacotron2Logger
+from logger import Tacotron2Logger, EpisodicLogger
 from hparams import create_hparams
 
 
@@ -107,12 +108,13 @@ def prepare_dataloaders(hparams):
 
     return train_loader, train_sampler, val_loader, val_sampler
 
-def prepare_directories_and_logger(output_directory, log_directory, rank):
+def prepare_directories_and_logger(output_directory, log_directory, rank, model, hparams):
     if rank == 0:
         if not os.path.isdir(output_directory):
             os.makedirs(output_directory)
             os.chmod(output_directory, 0o775)
-        logger = Tacotron2Logger(os.path.join(output_directory, log_directory))
+        
+        logger = model.get_logger(os.path.join(output_directory, log_directory), hparams)
     else:
         logger = None
     return logger
@@ -235,14 +237,10 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
 
     if hparams.distributed_run:
         model = apply_gradient_allreduce(model)
-    
-    if hparams.criterion == 'episodic-loss':
-        criterion = EpisodicLoss()
-    elif hparams.criterion == 'tacotron2-loss':
-        criterion = Tacotron2Loss()
 
+    criterion = model.get_criterion(hparams)
     logger = prepare_directories_and_logger(
-        output_directory, log_directory, rank)
+        output_directory, log_directory, rank, model, hparams)
 
     train_loader, train_sampler, val_loader, val_sampler = prepare_dataloaders(hparams)
 
@@ -280,16 +278,20 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             x, y = model.parse_batch(batch)
             y_pred = model(x)
             
-            z0, z1 = model.get_zs_from_pred(y_pred)
-            z0_list = [z0.new_ones(z0.size()) for _ in range(n_gpus)]
-            z1_list = [z1.new_ones(z1.size()) for _ in range(n_gpus)]
+            if hparams.use_mine:
+                z0, z1 = model.get_zs_from_pred(y_pred)
+                z0_list = [z0.new_ones(z0.size()) for _ in range(n_gpus)]
+                z1_list = [z1.new_ones(z1.size()) for _ in range(n_gpus)]
 
-            z0_list = gather_tensor(z0, z0_list)
-            z1_list = gather_tensor(z1, z1_list)
+                z0_list = gather_tensor(z0, z0_list)
+                z1_list = gather_tensor(z1, z1_list)
 
-            l2_loss = criterion(y_pred, y)
-            mi_loss = model.mi_loss(z0_list, z1_list)
-            loss = l2_loss + mi_loss
+                l2_loss = criterion(y_pred, y)
+                mi_loss = model.mi_loss(z0_list, z1_list)
+                loss = l2_loss + mi_loss
+            else:
+                loss = criterion(y_pred, y)
+                mi_loss = 0.
 
             if hparams.distributed_run:
                 reduced_loss = reduce_tensor(loss.data, n_gpus).item()
@@ -309,7 +311,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             else:
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     model.parameters(), hparams.grad_clip_thresh)
-
+            
             optimizer.step()
 
             if not is_overflow and rank == 0:

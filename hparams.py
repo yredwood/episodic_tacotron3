@@ -124,12 +124,14 @@ def create_hparams(hparams_string=None, verbose=False):
         use_mine = False,
         model_name = 'episodic-baseline', # [gst-tacotron, episodic-transformer, episodic-baseline]
         transformer_type = 'dual_baseline',
-        sentence_encoder_dim = 128,
 
         num_common =  16,
         num_support = 16,
         num_query =   16,
         criterion = 'episodic-loss',  # [episodic-loss, tacotron2-loss]
+        logger = 'tacotron2-logger',
+
+        ref_embedding_dim = 256,
 
 
         # test arg
