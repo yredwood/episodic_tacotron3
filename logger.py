@@ -134,11 +134,10 @@ class DualAttentionLogger(SummaryWriter):
             plot_alignment_to_numpy(attn_text[idx].data.cpu().numpy().T),
             iteration, dataformats='HWC')
 
-        if attn_refmel is not None:
-            self.add_image(
-                "attn_refmel",
-                plot_alignment_to_numpy(attn_refmel[idx].data.cpu().numpy().T),
-                iteration, dataformats='HWC')
+        self.add_image(
+            "attn_refmel",
+            plot_alignment_to_numpy(attn_refmel[idx].data.cpu().numpy().T),
+            iteration, dataformats='HWC')
 
         self.add_image(
             "mel_target",

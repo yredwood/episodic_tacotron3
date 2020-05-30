@@ -13,108 +13,108 @@ from loss_function import EpisodicLoss
 from logger import DualAttentionLogger
 import pdb
 
-#class Block(nn.Module):
-#    def __init__(self, n_in, n_out, shortcut=False):
-#        super().__init__()
-#
-#        filter_size = 3
-#        padding = filter_size // 2
-#        self.conv1 = nn.Conv2d(n_in, n_out, filter_size, stride=2, padding=padding, bias=False)
-#        self.relu = nn.ReLU()
-#        self.bn1 = nn.BatchNorm2d(n_out)
-#
-#    def forward(self, x):
-#        x = self.conv1(x)
-#        x = self.bn1(x)
-#        x = self.relu(x)
-#        return x
-#
-#class ConvEmbedding(nn.Module):
-#    def __init__(self, input_dim):
-#        super().__init__()
-#        self.inner_dim = 32
-#        self.input_dim = 80
-#        
-#        layers = [Block(1, 32), Block(32, 32)]
-#        self.backbone = nn.Sequential(*layers)
-#
-#    def forward(self, x):
-#        x = x.transpose(-1,-2)
-#        x = x.view(x.size(0), 1, -1, self.input_dim)
-#        x = self.backbone(x) # b, 32, T//4, 80//4
-#        x = x.permute(0,2,1,3)
-#        x = x.reshape(x.size(0), x.size(1), -1) # b,T//4, 32*20
-#        x = x.transpose(0,1)
-#        return x
-#
-#class RefmelEncoder(nn.Module):
-#    def __init__(self, hp):
-#        '''
-#        las-style encoder
-#        '''
-#        super().__init__()
-#
-#        input_dim = hp.n_mel_channels
-#        self.pre_conv = ConvEmbedding(input_dim)
-#        self.preconv_dim = 32 * self.pooling(input_dim)
-#        
-#        self.lstm_hidden_dim = (hp.ref_embedding_dim) // 2 
-#        self.lstm_num_layers = 4
-#        self.lstm = LSTM_BN(
-#                input_size=self.preconv_dim,
-#                hidden_size=self.lstm_hidden_dim,
-#                num_layers=self.lstm_num_layers,
-#                dropout=0.1,
-#                bidirectional=True,
-#                shortcut=True,
-#        )
-#        self.output_dim = self.lstm_hidden_dim * 2
-#
-#    def forward(self, x, x_len=None):
-#        
-#        if x_len is None:
-#            x_len = self.calc_length(x)
-#        x_emb = self.pre_conv(x) # (T,bsz,640)
-#        #x_emb = F.dropout(x_emb, p=0.5, training=self.training)
-#
-#        pooled_length = [self.pooling(_l) for _l in x_len]
-#        pooled_length = x_emb.new_tensor(pooled_length).long()
-#        #assert pooled_length[0] == x_emb.size(0)
-#
-#        state_size = self.lstm_num_layers*2, x_emb.size(1), self.lstm_hidden_dim
-#        fw_x = nn.utils.rnn.pack_padded_sequence(x_emb, pooled_length, enforce_sorted=False)
-#        fw_h = x_emb.new_zeros(*state_size)
-#        fw_c = x_emb.new_zeros(*state_size)
-#        packed_outputs, (final_hiddens, final_cells) = self.lstm(fw_x, (fw_h, fw_c))
-#
-##        # not using final_h, final_c
-##        final_outs, _ = nn.utils.rnn.pad_packed_sequence(packed_outputs, padding_value=.0)
-##        final_outs = F.dropout(final_outs, p=0.5, training=self.training)
-##        return final_outs.transpose(0,1), pooled_length
-#
+class Block(nn.Module):
+    def __init__(self, n_in, n_out, shortcut=False):
+        super().__init__()
+
+        filter_size = 5
+        padding = filter_size // 2
+        self.conv1 = nn.Conv2d(n_in, n_out, filter_size, stride=2, padding=padding, bias=False)
+        self.relu = nn.ReLU()
+        self.bn1 = nn.BatchNorm2d(n_out)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        return x
+
+class ConvEmbedding(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.inner_dim = 32
+        self.input_dim = 80
+        
+        layers = [Block(1, 32), Block(32, 32)]
+        self.backbone = nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = x.transpose(-1,-2)
+        x = x.view(x.size(0), 1, -1, self.input_dim)
+        x = self.backbone(x) # b, 32, T//4, 80//4
+        x = x.permute(0,2,1,3)
+        x = x.reshape(x.size(0), x.size(1), -1) # b,T//4, 32*20
+        x = x.transpose(0,1)
+        return x
+
+class RefmelEncoder(nn.Module):
+    def __init__(self, hp):
+        '''
+        las-style encoder
+        '''
+        super().__init__()
+
+        input_dim = hp.n_mel_channels
+        self.pre_conv = ConvEmbedding(input_dim)
+        self.preconv_dim = 32 * self.pooling(input_dim)
+        
+        self.lstm_hidden_dim = (hp.ref_embedding_dim) // 2 
+        self.lstm_num_layers = 2
+        self.lstm = LSTM_BN(
+                input_size=self.preconv_dim,
+                hidden_size=self.lstm_hidden_dim,
+                num_layers=self.lstm_num_layers,
+                dropout=0.1,
+                bidirectional=True,
+                shortcut=True,
+        )
+        self.output_dim = self.lstm_hidden_dim * 2
+
+    def forward(self, x, x_len=None):
+        
+        if x_len is None:
+            x_len = self.calc_length(x)
+        x_emb = self.pre_conv(x) # (T,bsz,640)
+        #x_emb = F.dropout(x_emb, p=0.5, training=self.training)
+
+        pooled_length = [self.pooling(_l) for _l in x_len]
+        pooled_length = x_emb.new_tensor(pooled_length).long()
+        #assert pooled_length[0] == x_emb.size(0)
+
+        state_size = self.lstm_num_layers*2, x_emb.size(1), self.lstm_hidden_dim
+        fw_x = nn.utils.rnn.pack_padded_sequence(x_emb, pooled_length, enforce_sorted=False)
+        fw_h = x_emb.new_zeros(*state_size)
+        fw_c = x_emb.new_zeros(*state_size)
+        packed_outputs, (final_hiddens, final_cells) = self.lstm(fw_x, (fw_h, fw_c))
+
+        # not using final_h, final_c
+        final_outs, _ = nn.utils.rnn.pad_packed_sequence(packed_outputs, padding_value=.0)
+        final_outs = F.dropout(final_outs, p=0.5, training=self.training)
+        return final_outs.transpose(0,1), pooled_length
+
 #        final_outs = final_hiddens.view(-1,2,final_hiddens.size(-2), final_hiddens.size(-1))
 #        final_outs = torch.cat((final_outs[-1,0], final_outs[-1,1]),dim=-1)
 #        return final_outs.unsqueeze(1)
-#
-#
-#    def pooling(self, x):
-#        for _ in range(len(self.pre_conv.backbone)):
-#            #x = (x - 3 + 2 * 3//2) // 2 + 1
-#            x = x // 2 
-#        return x
-#
-#    def calc_length(self, x):
-#        x_len = [x.size(-1) for _ in range(x.size(0))]
-#        for t in reversed(range(x.size(-1))):
-#            pads = (x[:,:,t].sum(1) == 0).int().tolist()
-#            x_len = [x_len[i] - pads[i] for i in range(len(x_len))]
-#
-#            if sum(pads) == 0:
-#                break
-#        return x_len
-#
-#def get_packed_sequence(data, batch_sizes, sorted_indices, unsorted_indices):
-#        return PackedSequence(data, batch_sizes, sorted_indices, unsorted_indices)
+
+
+    def pooling(self, x):
+        for _ in range(len(self.pre_conv.backbone)):
+            #x = (x - 3 + 2 * 3//2) // 2 + 1
+            x = x // 2 
+        return x
+
+    def calc_length(self, x):
+        x_len = [x.size(-1) for _ in range(x.size(0))]
+        for t in reversed(range(x.size(-1))):
+            pads = (x[:,:,t].sum(1) == 0).int().tolist()
+            x_len = [x_len[i] - pads[i] for i in range(len(x_len))]
+
+            if sum(pads) == 0:
+                break
+        return x_len
+
+def get_packed_sequence(data, batch_sizes, sorted_indices, unsorted_indices):
+        return PackedSequence(data, batch_sizes, sorted_indices, unsorted_indices)
 
 
 class DualAttnDecoder(nn.Module):
@@ -127,7 +127,7 @@ class DualAttnDecoder(nn.Module):
         self.n_mel_channels = hparams.n_mel_channels
         self.n_frames_per_step = hparams.n_frames_per_step
 
-        self.text_embedding_dim = hparams.encoder_embedding_dim + hparams.ref_embedding_dim + 128
+        self.text_embedding_dim = hparams.encoder_embedding_dim
         self.refmel_embedding_dim = hparams.ref_embedding_dim
 
         self.decoder_rnn_dim = hparams.decoder_rnn_dim
@@ -140,7 +140,6 @@ class DualAttnDecoder(nn.Module):
         self.gate_threshold = hparams.gate_threshold
         self.p_teacher_forcing = hparams.p_teacher_forcing
 
-
         self.prenet_f0 = ConvNorm(
             1, hparams.prenet_f0_dim,
             kernel_size=hparams.prenet_f0_kernel_size,
@@ -152,7 +151,7 @@ class DualAttnDecoder(nn.Module):
             [hparams.prenet_dim, hparams.prenet_dim])
 
         self.attention_rnn = nn.LSTMCell(
-            hparams.prenet_dim + self.text_embedding_dim + 1,
+            hparams.prenet_dim + self.text_embedding_dim,
             hparams.attention_rnn_dim)
 
         self.attention_layer = Attention(
@@ -160,25 +159,25 @@ class DualAttnDecoder(nn.Module):
             hparams.attention_dim, hparams.attention_location_n_filters,
             hparams.attention_location_kernel_size)
 
-#        self.attention_rnn_refmel = nn.LSTMCell(
-#            hparams.prenet_dim + self.refmel_embedding_dim,
-#            hparams.attention_rnn_dim)
-#
-#        self.attention_layer_refmel = Attention(
-#            hparams.attention_rnn_dim, self.refmel_embedding_dim,
-#            hparams.attention_dim, hparams.attention_location_n_filters,
-#            hparams.attention_location_kernel_size)
+        self.attention_rnn_refmel = nn.LSTMCell(
+            hparams.prenet_dim + self.refmel_embedding_dim,
+            hparams.attention_rnn_dim)
+
+        self.attention_layer_refmel = Attention(
+            hparams.attention_rnn_dim, self.refmel_embedding_dim,
+            hparams.attention_dim, hparams.attention_location_n_filters,
+            hparams.attention_location_kernel_size)
 
         self.decoder_rnn = nn.LSTMCell(
-            hparams.attention_rnn_dim + self.text_embedding_dim,
+            hparams.attention_rnn_dim*2 + self.text_embedding_dim + self.refmel_embedding_dim,
             hparams.decoder_rnn_dim, 1)
 
         self.linear_projection = LinearNorm(
-            hparams.decoder_rnn_dim + self.text_embedding_dim,
+            hparams.decoder_rnn_dim + self.text_embedding_dim + self.refmel_embedding_dim,
             hparams.n_mel_channels * hparams.n_frames_per_step)
 
         self.gate_layer = LinearNorm(
-            hparams.decoder_rnn_dim + self.text_embedding_dim, 1,
+            hparams.decoder_rnn_dim + self.text_embedding_dim + self.refmel_embedding_dim, 1,
             bias=True, w_init_gain='sigmoid')
 
 
@@ -237,18 +236,12 @@ class DualAttnDecoder(nn.Module):
         which is hidden and cell states of rnns
         '''
 
-        # add dummy f0 frame
-        dummy = input_frame.new_zeros(input_frame.size(0), 1)
-        input_frame = torch.cat((input_frame, dummy), dim=1)
-
         input_text = self._decode_single_attn(input_frame, text_vars,
                 self.attention_rnn, self.attention_layer)
-#        input_refmel = self._decode_single_attn(input_frame, refmel_vars,
-#                self.attention_rnn_refmel, self.attention_layer_refmel)
-#        decoder_input = torch.cat(
-#            (input_text, input_refmel), dim=-1)
-
-        decoder_input = input_text
+        input_refmel = self._decode_single_attn(input_frame, refmel_vars,
+                self.attention_rnn_refmel, self.attention_layer_refmel)
+        decoder_input = torch.cat(
+            (input_text, input_refmel), dim=-1)
 
         dh, dc = self.decoder_rnn(
                 decoder_input, (dec_vars['dec_h'], dec_vars['dec_c']))
@@ -259,8 +252,7 @@ class DualAttnDecoder(nn.Module):
         dec_vars['dec_h'] = dh
         dec_vars['dec_c'] = dc
 
-        #context = torch.cat((dh, text_vars['attn_context'], refmel_vars['attn_context']), dim=1)
-        context = torch.cat((dh, text_vars['attn_context']), dim=1)
+        context = torch.cat((dh, text_vars['attn_context'], refmel_vars['attn_context']), dim=1)
         pred = self.linear_projection(context)
         gate_pred = self.gate_layer(context)
         # attention will be saved in {}_vars['attn_w']
@@ -287,7 +279,7 @@ class DualAttnDecoder(nn.Module):
         # : decoder_rnn
         # -> internal states will be changed inside of the functions
         text_vars = self.initialize_rnn(text_embedding, text_length, self.attention_layer.memory_layer)
-        #refmel_vars = self.initialize_rnn(refmel_embedding, refmel_length, self.attention_layer_refmel.memory_layer)
+        refmel_vars = self.initialize_rnn(refmel_embedding, refmel_length, self.attention_layer_refmel.memory_layer)
         dec_vars = self.initialize_decoder(text_embedding)
 
         # 3. autoregressive generation
@@ -300,20 +292,20 @@ class DualAttnDecoder(nn.Module):
                 rnn_input = self.prenet(mel_outputs[-1])
 
             mel_output, gate_output = self.decode(
-                    rnn_input, text_vars, None, dec_vars)
+                    rnn_input, text_vars, refmel_vars, dec_vars)
             attn_t = text_vars['attn_w'] 
-            #attn_m = refmel_vars['attn_w']
+            attn_m = refmel_vars['attn_w']
             mel_outputs += [mel_output.squeeze(1)]
-            gate_outputs += [gate_output.squeeze()]
+            gate_outputs += [gate_output.squeeze(1)]
             align_text += [attn_t]
-            #align_refmel += [attn_m]
-
+            align_refmel += [attn_m]
+        
         # 4. reshape outputs 
         mel_outputs = torch.stack(mel_outputs).permute(1,2,0) # (t,b,c -> b,c,t)
         gate_outputs = torch.stack(gate_outputs).transpose(0,1) # (t,b -> b,t)
-        #align_refmel = torch.stack(align_refmel).transpose(0,1) # (t,b,tr -> b,t,tr)
+        align_refmel = torch.stack(align_refmel).transpose(0,1) # (t,b,tr -> b,t,tr)
         align_text = torch.stack(align_text).transpose(0,1) # (t,b,tt -> b,t,tt)
-        return mel_outputs, gate_outputs, None, align_text
+        return mel_outputs, gate_outputs, align_refmel, align_text
 
     def inference(self, input_dict):
         # 0. unsqueeze dict inputs for clarity
@@ -321,7 +313,6 @@ class DualAttnDecoder(nn.Module):
         text_length         = input_dict['text_length'] # (bsz, t_text)
         refmel_embedding    = input_dict['refmel_embedding'] # (bsz, t_mel, refmel_embedding_dim)
         refmel_length       = input_dict['refmel_length'] # (bsz, t_mel)
-        targets             = input_dict['targets'] # (bsz,n_mel_channels,t_mel_true)
 
         # 1. get zero frame
         zero_frame = Variable(
@@ -332,6 +323,7 @@ class DualAttnDecoder(nn.Module):
         
         # 2. initialize rnn layers
         text_vars = self.initialize_rnn(text_embedding, text_length, self.attention_layer.memory_layer)
+        refmel_vars = self.initialize_rnn(refmel_embedding, refmel_length, self.attention_layer_refmel.memory_layer)
         dec_vars = self.initialize_decoder(text_embedding)
 
         # 3. generation
@@ -339,11 +331,13 @@ class DualAttnDecoder(nn.Module):
         mel_outputs, gate_outputs, align_text, align_refmel = [], [], [], []
         for t_frame in range(self.max_decoder_steps):
             mel_output, gate_output = self.decode(
-                    self.prenet(rnn_input), text_vars, None, dec_vars)
+                    self.prenet(rnn_input), text_vars, refmel_vars, dec_vars)
             attn_t = text_vars['attn_w']
+            attn_m = refmel_vars['attn_w']
             mel_outputs += [mel_output.squeeze(1)]
             gate_outputs += [gate_output.squeeze()]
             align_text += [attn_t]
+            align_refmel += [attn_m]
             
             if torch.sigmoid(gate_output.data) > self.gate_threshold:
                 break
@@ -354,10 +348,10 @@ class DualAttnDecoder(nn.Module):
         
         # 4. reshape outputs
         mel_outputs = torch.stack(mel_outputs).permute(1,2,0) # (t,b,c -> b,c,t)
-        #gate_outputs = torch.stack(gate_outputs).transpose(0,1) # (t,b -> b,t)
-        #align_refmel = torch.stack(align_refmel).transpose(0,1) # (t,b,tr -> b,t,tr)
+        gate_outputs = torch.stack(gate_outputs) # (t,b -> b,t)
+        align_refmel = torch.stack(align_refmel).transpose(0,1) # (t,b,tr -> b,t,tr)
         align_text = torch.stack(align_text).transpose(0,1) # (t,b,tt -> b,t,tt)
-        return mel_outputs, None, None, align_text
+        return mel_outputs, gate_outputs, align_refmel, align_text
 
 
 class DualAttention(nn.Module):
@@ -373,12 +367,47 @@ class DualAttention(nn.Module):
         val = sqrt(3.0) * std  # uniform bounds for std
         self.embedding.weight.data.uniform_(-val, val)
         self.encoder = Encoder(hparams) # text encoder
-        #self.gst = RefmelEncoder(hparams)
         self.decoder = DualAttnDecoder(hparams)
         self.postnet = Postnet(hparams)
-        self.gst = GST(hparams)
+        #self.gst = GST(hparams)
+        self.gst = RefmelEncoder(hparams)
+
+        if not hparams.episodic_training: 
+            self.parse_batch = self._parse_normal_batch
         
         print ('dual attention inited')
+
+    def _parse_normal_batch(self, batch):
+        text_padded, input_lengths, mel_padded, gate_padded, \
+                output_lengths, speaker_ids, filename = batch
+        text_padded = to_gpu(text_padded).long()
+        input_lengths = to_gpu(input_lengths).long()
+        max_len = torch.max(input_lengths.data).item() 
+        mel_padded = to_gpu(mel_padded).float()
+        gate_padded = to_gpu(gate_padded).float()
+        output_lengths = to_gpu(output_lengths).long()  
+        speaker_ids = to_gpu(speaker_ids.data).long()
+
+        y = {
+            'mel': mel_padded,
+            'gate': gate_padded,
+        }
+        x = {
+            'query': {
+                'text_padded': text_padded,
+                'text_length': input_lengths,
+                'mel_padded': mel_padded,
+                'mel_length': output_lengths,
+            },
+            'support': {
+                'mel_padded': mel_padded,
+                'mel_length': output_lengths,
+            }
+        }
+        return (x, y)
+
+
+        
 
     def parse_batch(self, batch):
 
@@ -432,26 +461,17 @@ class DualAttention(nn.Module):
         query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
         query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
         
-        #refmel_embedding = self.gst(support_set['mel_padded'], support_set['mel_length'].data)
-        refmel_embedding = self.gst(support_set['mel_padded'])
+        refmel_embedding, refmel_length = self.gst(support_set['mel_padded'], support_set['mel_length'].data)
         speaker_embedding = refmel_embedding.new_zeros(refmel_embedding.size(0),
                 query_text_embedding.size(1), 128)
         # (bsz, 1, refmel_dim) 
         # (bsz, t_mel, refmel_dim) 
-        catted = torch.cat(
-                (
-                    query_text_embedding, 
-                    refmel_embedding.repeat(1,query_text_embedding.size(1),1),
-                    speaker_embedding,
-                ), 
-                dim=2)
-        
+            
         decoder_inputs = {
-            #'text_embedding': query_text_embedding,
-            'text_embedding': catted, 
+            'text_embedding': query_text_embedding, 
             'text_length': query_set['text_length'].data,
             'refmel_embedding': refmel_embedding, 
-            'refmel_length': None,
+            'refmel_length': refmel_length,
             'targets': query_set['mel_padded'],
         }
 
@@ -478,26 +498,17 @@ class DualAttention(nn.Module):
         query_text_embedding = self.embedding(query_set['text_padded']).transpose(1,2)
         query_text_embedding = self.encoder(query_text_embedding, query_set['text_length'].data)
 
-        #refmel_embedding = self.gst(support_set['mel_padded'], support_set['mel_length'].data)
-        refmel_embedding = self.gst(support_set['mel_padded'])
+        refmel_embedding, refmel_length = self.gst(support_set['mel_padded'], support_set['mel_length'].data)
         speaker_embedding = refmel_embedding.new_zeros(refmel_embedding.size(0),
                 query_text_embedding.size(1), 128)
         # (bsz, 1, refmel_dim) 
         # (bsz, t_mel, refmel_dim) 
-        catted = torch.cat(
-                (
-                    query_text_embedding, 
-                    refmel_embedding.repeat(1,query_text_embedding.size(1),1),
-                    speaker_embedding,
-                ), 
-                dim=2)
-        
+
         decoder_inputs = {
-            #'text_embedding': query_text_embedding,
-            'text_embedding': catted, 
+            'text_embedding': query_text_embedding,
             'text_length': query_set['text_length'].data,
             'refmel_embedding': refmel_embedding, 
-            'refmel_length': None,
+            'refmel_length': refmel_length,
             'targets': None,
         }
 

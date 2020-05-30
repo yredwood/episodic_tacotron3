@@ -28,7 +28,7 @@ def load_model(hparams):
     elif hparams.model_name == 'dual-attention':
         from custom_layers import DualAttention
         model = DualAttention(hparams).cuda()
-        hparams.episodic_training = True
+        #hparams.episodic_training = True
         # automatically changes loss function and logger
 
     else:
@@ -468,9 +468,11 @@ class Decoder(nn.Module):
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
-            if len(mel_outputs) == 0 or np.random.uniform(0.0, 1.0) <= self.p_teacher_forcing:
+            # teacher forcing| 1.start, 2.p<p(tf), 3. not training
+            if (len(mel_outputs)==0 or np.random.uniform(0.0, 1.0) <= self.p_teacher_forcing) or (not self.training):
                 decoder_input = torch.cat((decoder_inputs[len(mel_outputs)], f0), dim=1)
             else:
+                # also comes here in evaluation mode
                 decoder_input = torch.cat((self.prenet(mel_outputs[-1]), f0), dim=1)
             mel_output, gate_output, attention_weights = self.decode(
                 decoder_input)

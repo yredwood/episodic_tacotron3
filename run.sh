@@ -6,8 +6,12 @@ IFS=''
 hp=("training_files=filelists/vctk_train.txt,"
     "validation_files=filelists/vctk_val.txt,"
     "distributed_run=True,"
-    "model_name=dual-attention,"
+    "model_name=episodic-baseline,"
     "use_mine=False,"
+    "p_teacher_forcing=1.0,"
+    "episodic_training=False,"
+    "decoder_rnn_dim=512,"
+    "attention_rnn_dim=512,"
     "dist_url=tcp://localhost:54321")
 hp="${hp[*]}" 
 #    "num_query=16,"
@@ -18,17 +22,16 @@ hp="${hp[*]}"
 if [ $cmd1 = train ]
 then
 #name=vctk_episodic_dual_scratchpretrained
-    name=dual_attn_exp
-    CUDA_VISIBLE_DEVICES=1 python -m multiproc train.py \
+    name=0529_gst_smaller
+    CUDA_VISIBLE_DEVICES=4,5,6,7 python -m multiproc train.py \
         --hparams=${hp} \
-        -c models/vctk_gst_pretrained_2gpu/checkpoint_250000 \
+        -c models/pretrained/mellotron_libritts.pt --warm_start \
         --output_directory=models/$name --log_directory=logs/$name 
 
-        #-c models/pretrained/mellotron_libritts.pt --warm_start \
         #-c models/vctk_episodic_dual_24k/checkpoint_49000 --warm_start \
         #-c models/pretrained/mellotron_libritts.pt --warm_start \
+        #-c models/vctk_gst_pretrained_2gpu/checkpoint_250000 \
 fi
-
 
 
 # test script
@@ -39,11 +42,11 @@ then
     sid=p287
     ref_idx=-1
     seed=2020
-    model=episodic
-    #model=vctk_episodic_mine
+    #model=episodic
+    model=
     hp+=",ref_ind=0,num_common=0"
     echo $hp
-    for (( ckpt_n=100; ckpt_n<=100; ckpt_n+=10 ))
+    for (( ckpt_n=2; ckpt_n<=2; ckpt_n+=10 ))
     do
         name=${model}_${ckpt_n}k_${sid}_${ref_idx}
         echo $name
@@ -64,18 +67,16 @@ IFS=''
 hp=("training_files=filelists/vctk_train.txt,"
     "validation_files=filelists/vctk_val.txt,"
     "distributed_run=True,"
-    "episodic_training=True,"
     "model_name=episodic-baseline,"
-    "transformer_type=dual_baseline,"
     "use_mine=False,"
-    "criterion=tacotron2-loss,"
-    "logger=tacotron2-logger,"
-    "dist_url=tcp://localhost:54323")
+    "p_teacher_forcing=1.0,"
+    "episodic_training=False,"
+    "dist_url=tcp://localhost:54320")
 hp="${hp[*]}" 
 
 if [ $cmd1 = koiu ]
 then
-    name=episodic
+    name=0529_gst_slightly_diff
     model_dir=/nfs/maximoff/ext01/mike/models/mellotron/models/${name}
     log_dir=/nfs/maximoff/ext01/mike/models/mellotron/logs/${name}
     koiu deploy -p 3.6.4 -v --image nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04 -g 4 -m maximoff -- \

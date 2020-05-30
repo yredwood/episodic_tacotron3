@@ -86,6 +86,7 @@ def get_speaker_info(fpath):
 
 def evaluate(args):
     hparams = create_hparams(args.hparam_string)
+    hparams.episodic_training = True
     stft = TacotronSTFT(hparams.filter_length, hparams.hop_length, hparams.win_length,
             hparams.n_mel_channels, hparams.sampling_rate, hparams.mel_fmin,
             hparams.mel_fmax)

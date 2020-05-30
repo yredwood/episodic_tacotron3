@@ -120,6 +120,8 @@ def create_hparams(hparams_string=None, verbose=False):
         #episodic_training = False,
         #model_name = 'gst-tacotron',
 
+        validation_freq = 100,
+
         episodic_training = True,
         use_mine = False,
         model_name = 'episodic-baseline', # [gst-tacotron, episodic-transformer, episodic-baseline]
@@ -131,7 +133,7 @@ def create_hparams(hparams_string=None, verbose=False):
         criterion = 'episodic-loss',  # [episodic-loss, tacotron2-loss]
         logger = 'tacotron2-logger',
 
-        ref_embedding_dim = 256,
+        ref_embedding_dim = 64,
 
 
         # test arg
