@@ -10,9 +10,9 @@ hp=("training_files=filelists/vctk_train.txt,"
     "use_mine=False,"
     "p_teacher_forcing=1.0,"
     "episodic_training=False,"
-    "decoder_rnn_dim=512,"
-    "attention_rnn_dim=512,"
-    "dist_url=tcp://localhost:54321")
+    "decoder_rnn_dim=960,"
+    "attention_rnn_dim=960,"
+    "dist_url=tcp://localhost:54320")
 hp="${hp[*]}" 
 #    "num_query=16,"
 #    "num_common=16,"
@@ -22,8 +22,8 @@ hp="${hp[*]}"
 if [ $cmd1 = train ]
 then
 #name=vctk_episodic_dual_scratchpretrained
-    name=0529_gst_smaller
-    CUDA_VISIBLE_DEVICES=4,5,6,7 python -m multiproc train.py \
+    name=0529_gst_resampled_small
+    CUDA_VISIBLE_DEVICES=0,1,2,3 python -m multiproc train.py \
         --hparams=${hp} \
         -c models/pretrained/mellotron_libritts.pt --warm_start \
         --output_directory=models/$name --log_directory=logs/$name 
@@ -43,10 +43,10 @@ then
     ref_idx=-1
     seed=2020
     #model=episodic
-    model=
+    model=0529_gst
     hp+=",ref_ind=0,num_common=0"
     echo $hp
-    for (( ckpt_n=2; ckpt_n<=2; ckpt_n+=10 ))
+    for (( ckpt_n=60; ckpt_n<=60; ckpt_n+=10 ))
     do
         name=${model}_${ckpt_n}k_${sid}_${ref_idx}
         echo $name
@@ -79,7 +79,7 @@ then
     name=0529_gst_slightly_diff
     model_dir=/nfs/maximoff/ext01/mike/models/mellotron/models/${name}
     log_dir=/nfs/maximoff/ext01/mike/models/mellotron/logs/${name}
-    koiu deploy -p 3.6.4 -v --image nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04 -g 4 -m maximoff -- \
+    time koiu deploy -p 3.6.4 -v --image nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04 -g 4 -m maximoff -- \
         python -m multiproc train.py \
         --hparams=${hp} \
         -c /nfs/maximoff/ext01/mike/models/mellotron/models/pretrained/mellotron_libritts.pt --warm_start \
