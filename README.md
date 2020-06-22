@@ -1,33 +1,25 @@
-![Mellotron](mellotron_logo.png "Mellotron")
-
-### Rafael Valle\*, Jason Li\*, Ryan Prenger and Bryan Catanzaro
-In our recent [paper] we propose Mellotron: a multispeaker voice synthesis model
-based on Tacotron 2 GST that can make a voice emote and sing without emotive or
-singing training data. 
-
-By explicitly conditioning on rhythm and continuous pitch
-contours from an audio signal or music score, Mellotron is able to generate
-speech in a variety of styles ranging from read speech to expressive speech,
-from slow drawls to rap and from monotonous voice to singing voice.
-
-Visit our [website] for audio samples.
+Mellotron based GST-tacotron2 + episodic training + ...
 
 ## Pre-requisites
 1. NVIDIA GPU + CUDA cuDNN
 
 ## Setup
-1. Clone this repo: `git clone https://github.com/NVIDIA/mellotron.git`
-2. CD into this repo: `cd mellotron`
-3. Initialize submodule: `git submodule init; git submodule update`
-4. Install [PyTorch]
-5. Install [Apex]
-6. Install python requirements or build docker image 
-    - Install python requirements: `pip install -r requirements.txt`
+1. Clone this repo: `git clone -b dev2 https://github.com/yredwood/episodic_tacotron3`
+2. `cd episodic_tacotron3`
+3. `git submodule init; git submodule update`
+4. Intall Pytorch & Apex
+5. Install requirements with `source docker_pip.sh`
 
-## Training
-1. Update the filelists inside the filelists folder to point to your data
-2. `python train.py --output_directory=outdir --log_directory=logdir`
-3. (OPTIONAL) `tensorboard --logdir=outdir/logdir`
+
+## Data preparation (only VCTK supported)
+1. wget http://homepages.inf.ed.ac.uk/jyamagis/release/VCTK-Corpus.tar.gz
+2. uncompress the file
+3. locate `VCTK-Corpus` to data-bin/
+4. `./run.sh preproc`
+
+## Training from LJSpeech pretrained model
+
+
 
 ## Training using a pre-trained model
 Training using a pre-trained model can lead to faster convergence  
