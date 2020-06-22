@@ -112,7 +112,6 @@ def evaluate(args):
     collate_fn = EpisodicCollater(1, hparams) # 1 is the frame / not implemented for multi-frame prediction
     batch_sampler = EpisodicBatchSampler(dataset.sid_to_index, hparams, shuffle=False)
 
-
     # load speaker info
     sinfo = get_speaker_info(args.speaker_info)
 

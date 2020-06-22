@@ -2,27 +2,28 @@ cmd1=$1
 cmd2=$2
 
 
+if [ $cmd1 = preproc ]
+then
+    python data/vctk_preprocessor.py data-bin/VCTK-Corpus/
+fi
+
 IFS=''
 hp=("training_files=filelists/vctk_train.txt,"
     "validation_files=filelists/vctk_val.txt,"
     "distributed_run=True,"
-    "model_name=episodic-baseline,"
+    "model_name=gst-tacotron,"
     "use_mine=False,"
     "p_teacher_forcing=1.0,"
     "episodic_training=False,"
-    "decoder_rnn_dim=960,"
-    "attention_rnn_dim=960,"
+    "num_query=16,"
+    "num_support=16,"
+    "num_common=16,"
     "dist_url=tcp://localhost:54320")
 hp="${hp[*]}" 
-#    "num_query=16,"
-#    "num_common=16,"
-#    "num_support=16,"
-
 
 if [ $cmd1 = train ]
 then
-#name=vctk_episodic_dual_scratchpretrained
-    name=0529_gst_resampled_small
+    name=gst_tacotron2_vctk
     CUDA_VISIBLE_DEVICES=0,1,2,3 python -m multiproc train.py \
         --hparams=${hp} \
         -c models/pretrained/mellotron_libritts.pt --warm_start \
@@ -33,27 +34,24 @@ then
         #-c models/vctk_gst_pretrained_2gpu/checkpoint_250000 \
 fi
 
-
-# test script
 if [ $cmd1 = test ]
 then
     # p287 (male), p265 (female)
     # ref >= 0: same reference / ref -1: difference references for each pred
-    sid=p287
+    sid=p304
     ref_idx=-1
     seed=2020
-    #model=episodic
-    model=0529_gst
-    hp+=",ref_ind=0,num_common=0"
+    model=vctk_gst_pretrained_2gpu
+    hp+=",ref_ind=-1,num_common=0"
     echo $hp
-    for (( ckpt_n=60; ckpt_n<=60; ckpt_n+=10 ))
+    for (( ckpt_n=280; ckpt_n<=280; ckpt_n+=10 ))
     do
         name=${model}_${ckpt_n}k_${sid}_${ref_idx}
         echo $name
         CUDA_VISIBLE_DEVICES=${cmd2} python evaluation.py \
             --save_audio=1 \
             --output_dir=audios/${name} \
-            --audio_path=filelists/vctk_24val.txt \
+            --audio_path=filelists/vctk_val.txt \
             --hparam_string=${hp} \
             --ckpt=models/${model}/checkpoint_${ckpt_n}000 \
             --seed=${seed} \
