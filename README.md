@@ -18,40 +18,13 @@ Mellotron based GST-tacotron2 + episodic training + ...
 4. `./run.sh preproc`
 
 ## Training from LJSpeech pretrained model
+1. download pretrained model from https://drive.google.com/file/d/1ZesPPyRRKloltRIuRnGZ2LIUEuMSVjkI/view
+2. `./run.sh train`
 
 
+## Evalate / Inference model
+1. download vocoder model (or griffin-lim can be used) [WaveGlow](https://drive.google.com/open?id=1Rm5rV5XaWWiUbIpg5385l5sh68z2bVOE)
+2. `./run.sh test 0` # 0: GPU_ID 
+3. Generated samples will be saved in audios/...
 
-## Training using a pre-trained model
-Training using a pre-trained model can lead to faster convergence  
-By default, the speaker embedding layer is [ignored]
 
-1. Download our published [Mellotron] model trained on LibriTTS
-2. `python train.py --output_directory=outdir --log_directory=logdir -c models/mellotron_libritts.pt --warm_start`
-
-## Multi-GPU (distributed) and Automatic Mixed Precision Training
-1. `python -m multiproc train.py --output_directory=outdir --log_directory=logdir --hparams=distributed_run=True,fp16_run=True`
-
-## Inference demo
-1. `jupyter notebook --ip=127.0.0.1 --port=31337`
-2. Load inference.ipynb 
-3. (optional) Download our published [WaveGlow](https://drive.google.com/open?id=1Rm5rV5XaWWiUbIpg5385l5sh68z2bVOE) model
-
-## Related repos
-[WaveGlow](https://github.com/NVIDIA/WaveGlow) Faster than real time Flow-based
-Generative Network for Speech Synthesis.
-
-## Acknowledgements
-This implementation uses code from the following repos: [Keith
-Ito](https://github.com/keithito/tacotron/), [Prem
-Seetharaman](https://github.com/pseeth/pytorch-stft), 
-[Chengqi Deng](https://github.com/KinglittleQ/GST-Tacotron),
-[Patrice Guyot](https://github.com/patriceguyot/Yin), as described in our code.
-
-[ignored]: https://github.com/NVIDIA/mellotron/blob/master/hparams.py#L22
-[paper]: https://arxiv.org/abs/1910.11997
-[WaveGlow]: https://drive.google.com/file/d/1WsibBTsuRg_SF2Z6L6NFRTT-NjEy1oTx/view?usp=sharing
-[Mellotron]: https://drive.google.com/open?id=1ZesPPyRRKloltRIuRnGZ2LIUEuMSVjkI
-[pytorch]: https://github.com/pytorch/pytorch#installation
-[website]: https://nv-adlr.github.io/Mellotron
-[Apex]: https://github.com/nvidia/apex
-[AMP]: https://github.com/NVIDIA/apex/tree/master/apex/amp
